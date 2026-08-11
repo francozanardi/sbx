@@ -1,0 +1,66 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Syntax-check every source file
+        run: find src -name '*.mjs' -exec node --check {} +
+
+      - name: Help runs without a project
+        run: node src/main.mjs help
+
+      # A project with no services exercises everything except Docker:
+      # manifest loading, slot allocation, port probing, template rendering,
+      # the worktree, the hooks, and teardown.
+      - name: Full lifecycle on a fixture project
+        run: |
+          set -euo pipefail
+          SBX="node $GITHUB_WORKSPACE/src/main.mjs"
+          mkdir -p /tmp/fixture/templates && cd /tmp/fixture
+          git init -q . && git config user.email ci@example.com && git config user.name ci
+
+          cat > sandbox.config.mjs <<'EOF'
+          export default {
+            name: 'fixture',
+            worktreeRoot: '/tmp/fixture-worktrees',
+            secrets: '/tmp/fixture-secrets.env',
+            ports: { base: { app: 4700, db: 5700 }, maxSlots: 3 },
+            generate: { APP_SECRET: 32 },
+            variables: { LOG_LEVEL: 'debug' },
+            env: [{ from: 'templates/app.env', to: '.env' }],
+            hooks: {
+              install: 'echo installed',
+              migrate: 'echo migrated on $DB_PORT',
+              seed: 'echo seeded $SBX_NAME',
+              reset: 'echo reset',
+            },
+          };
+          EOF
+
+          printf 'APP_PORT=${APP_PORT}\nSECRET=${APP_SECRET}\nLOG=${LOG_LEVEL}\nSHARED=${SHARED_TOKEN}\n' > templates/app.env
+          echo 'SHARED_TOKEN=ci' > /tmp/fixture-secrets.env
+          git add -A && git commit -qm fixture
+
+          $SBX doctor
+          $SBX create sb-1
+          $SBX list
+          $SBX info sb-1
+          $SBX run sb-1 -- node -e "if (process.env.APP_PORT !== '4710') { throw new Error('wrong port: ' + process.env.APP_PORT) }"
+          grep -q 'APP_PORT=4710' /tmp/fixture-worktrees/sb-1/.env
+          grep -q 'SHARED=ci' /tmp/fixture-worktrees/sb-1/.env
+          grep -q 'LOG=debug' /tmp/fixture-worktrees/sb-1/.env
+          $SBX seed sb-1 --reset
+          $SBX delete sb-1 --delete-branch
+          test -z "$($SBX list | grep sb-1 || true)"

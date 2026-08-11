@@ -1,0 +1,47 @@
+{
+  "name": "@francozanardi/sbx",
+  "version": "0.1.0",
+  "description": "Named local sandboxes of a repository: one worktree, one port block, one set of services and seeded data each.",
+  "keywords": [
+    "sandbox",
+    "git-worktree",
+    "parallel",
+    "agents",
+    "development-environment",
+    "docker-compose",
+    "cli"
+  ],
+  "license": "MIT",
+  "author": "Franco Zanardi",
+  "homepage": "https://github.com/francozanardi/sbx#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/francozanardi/sbx.git"
+  },
+  "bugs": {
+    "url": "https://github.com/francozanardi/sbx/issues"
+  },
+  "type": "module",
+  "bin": {
+    "sbx": "src/main.mjs"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "os": [
+    "linux",
+    "darwin"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "sbx": "node src/main.mjs",
+    "check": "node --check src/main.mjs"
+  }
+}

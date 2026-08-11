@@ -1,0 +1,54 @@
+# Dependencies, caches, and the cost of a sandbox
+
+Every worktree gets its own dependency tree. Whether that is expensive depends
+on the package manager and on the filesystem — not on sbx, which only runs the
+`install` hook.
+
+## A measurement
+
+One machine (Linux, btrfs, warm caches), one mid-size pnpm monorepo. The
+seconds are illustrative; the **mechanism** is what transfers.
+
+| Step | Time | Disk |
+|---|---|---|
+| `git worktree add` | 0.2 s | 58 MB, the source tree |
+| `pnpm install` | 11.8 s | ~0 |
+| `docker compose up --wait` | 4.0 s | empty volumes |
+| **Total** | **~20 s** | **~58 MB** |
+
+Zero disk for 1.9 GB of `node_modules`, because pnpm stores each file once and
+**reflinks** it into the worktree — a copy-on-write clone. Every extent in the
+installed files comes back flagged `shared` from the filesystem.
+
+## Three tiers, and which one you land in matters
+
+| Filesystem | Mechanism | Consequence |
+|---|---|---|
+| btrfs, XFS, APFS | reflink (copy-on-write) | ~0 disk, and editing a file inside `node_modules` splits the extent instead of corrupting the shared store |
+| ext4 | hardlink | ~0 disk, but editing a file in place **does** reach the store and every other project using it |
+| worktrees on a different filesystem than the cache | full copy | In the same measurement: 37 s and 1.3 GB — three times slower, and real disk per sandbox |
+
+The third row is the trap. Keep worktrees on the same filesystem as the
+package manager's cache. `sbx doctor` warns when the worktree root and the
+home directory sit on different devices.
+
+## By package manager
+
+| Manager | Per-sandbox cost |
+|---|---|
+| pnpm, bun, uv | Near zero — content-addressed store, linked into place |
+| Yarn Berry (PnP) | Near zero — no `node_modules` at all |
+| npm, pip, poetry | **Full copy.** Their caches hold archives, not linkable files |
+| Go, Gradle, Maven, Cargo registry | Near zero — the module cache is global |
+| Cargo `target/` | Large and per-directory. Use `sccache` rather than sharing one target dir, which serializes builds on a lock |
+
+If the project's manager is in the full-copy row, lean toward a few long-lived
+sandboxes instead of one per task. Measure it in the repository before
+deciding — the difference between 12 seconds and two minutes changes which
+way of working makes sense.
+
+## Concurrency
+
+Two `pnpm install` runs against the same store, started together, finished in
+14.5 s each versus 11.8 s alone. Mild contention, no corruption. Creating two
+sandboxes at the same time is safe.
