@@ -5,14 +5,6 @@ export class ListCommand {
     this.terminal = terminal;
   }
 
-  summary() {
-    return 'List the sandboxes of this project.';
-  }
-
-  usage() {
-    return 'sbx list';
-  }
-
   async execute() {
     const records = this.workspace.registry.list().sort((left, right) => left.slot - right.slot);
     if (records.length === 0) {

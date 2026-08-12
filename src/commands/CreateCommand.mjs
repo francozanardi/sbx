@@ -10,14 +10,6 @@ export class CreateCommand {
     this.terminal = terminal;
   }
 
-  summary() {
-    return 'Create a sandbox: worktree, port block, services, seeded data.';
-  }
-
-  usage() {
-    return 'sbx create <name> [--branch=<branch>] [--from=<ref>] [--no-hooks]';
-  }
-
   async execute(argumentList) {
     const name = new SandboxName(argumentList.require(0, 'a sandbox name'));
     const options = {

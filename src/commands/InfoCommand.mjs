@@ -5,14 +5,6 @@ export class InfoCommand {
     this.reporter = reporter;
   }
 
-  summary() {
-    return 'Show a sandbox and its port block.';
-  }
-
-  usage() {
-    return 'sbx info <name>';
-  }
-
   async execute(argumentList) {
     const record = this.workspace.registry.get(argumentList.require(0, 'a sandbox name'));
     this.reporter.describe(record);

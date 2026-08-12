@@ -11,14 +11,6 @@ export class EnvCommand {
     this.terminal = terminal;
   }
 
-  summary() {
-    return "Print a sandbox's variables as shell exports.";
-  }
-
-  usage() {
-    return 'sbx env <name>';
-  }
-
   async execute(argumentList) {
     const record = this.workspace.registry.get(argumentList.require(0, 'a sandbox name'));
     const variables = this.workspace.environmentFor(record);

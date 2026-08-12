@@ -6,14 +6,6 @@ export class UpCommand {
     this.terminal = terminal;
   }
 
-  summary() {
-    return "Start a sandbox's services.";
-  }
-
-  usage() {
-    return 'sbx up <name>';
-  }
-
   async execute(argumentList) {
     const record = this.workspace.registry.get(argumentList.require(0, 'a sandbox name'));
     if (!this.workspace.manifest.composeFile()) {

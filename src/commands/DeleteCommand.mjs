@@ -6,14 +6,6 @@ export class DeleteCommand {
     this.terminal = terminal;
   }
 
-  summary() {
-    return 'Delete a sandbox: services, volumes, worktree, registry entry.';
-  }
-
-  usage() {
-    return 'sbx delete <name> [--delete-branch]';
-  }
-
   async execute(argumentList) {
     const name = argumentList.require(0, 'a sandbox name');
     const record = this.workspace.registry.get(name);

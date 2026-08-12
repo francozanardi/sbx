@@ -5,14 +5,6 @@ export class InitCommand {
     this.terminal = terminal;
   }
 
-  summary() {
-    return 'Write a starting sandbox.config.mjs into this project.';
-  }
-
-  usage() {
-    return 'sbx init';
-  }
-
   async execute() {
     const result = this.scaffolder.scaffold(process.cwd());
     this.terminal.heading(`Wrote ${result.manifestPath}`);

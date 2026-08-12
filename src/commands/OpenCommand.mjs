@@ -5,14 +5,6 @@ export class OpenCommand {
     this.processRunner = processRunner;
   }
 
-  summary() {
-    return "Open a sandbox's worktree in your editor.";
-  }
-
-  usage() {
-    return 'sbx open <name>   (editor from $SBX_EDITOR, default `code`)';
-  }
-
   async execute(argumentList) {
     const record = this.workspace.registry.get(argumentList.require(0, 'a sandbox name'));
     const editor = process.env.SBX_EDITOR ?? 'code';

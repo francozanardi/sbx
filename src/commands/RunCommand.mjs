@@ -13,14 +13,6 @@ export class RunCommand {
     this.processRunner = processRunner;
   }
 
-  summary() {
-    return "Run a command in a sandbox's worktree and environment.";
-  }
-
-  usage() {
-    return 'sbx run <name> -- <command> [args...]';
-  }
-
   async execute(argumentList) {
     const record = this.workspace.registry.get(argumentList.require(0, 'a sandbox name'));
     const [program, ...programArguments] = argumentList.passthrough;

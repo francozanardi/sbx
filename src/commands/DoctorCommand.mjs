@@ -5,14 +5,6 @@ export class DoctorCommand {
     this.terminal = terminal;
   }
 
-  summary() {
-    return 'Check this project for anything that would break `sbx create`.';
-  }
-
-  usage() {
-    return 'sbx doctor';
-  }
-
   async execute() {
     const checks = await this.inspector.inspect();
     this.terminal.heading('sbx doctor');

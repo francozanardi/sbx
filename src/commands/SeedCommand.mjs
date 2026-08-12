@@ -6,14 +6,6 @@ export class SeedCommand {
     this.terminal = terminal;
   }
 
-  summary() {
-    return 'Seed a sandbox. With --reset, wipe its data first.';
-  }
-
-  usage() {
-    return 'sbx seed <name> [--reset]';
-  }
-
   async execute(argumentList) {
     const record = this.workspace.registry.get(argumentList.require(0, 'a sandbox name'));
     const variables = this.workspace.environmentFor(record);
