@@ -8,7 +8,7 @@ export class SecretGenerator {
     if (!Number.isInteger(byteLength) || byteLength < 16) {
       throw new SbxError(
         `A generated secret needs at least 16 bytes of entropy, got ${byteLength}.`,
-        'Raise the value in `generate` in sandbox.config.mjs.',
+        'Raise the value in `generate` in sandbox.config.json.',
       );
     }
     return crypto.randomBytes(byteLength).toString('base64');

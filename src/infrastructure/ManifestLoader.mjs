@@ -1,18 +1,22 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { ProjectManifest } from '../domain/ProjectManifest.mjs';
 import { SbxError } from '../domain/SbxError.mjs';
 
-const MANIFEST_FILENAME = 'sandbox.config.mjs';
+const MANIFEST_FILENAME = 'sandbox.config.json';
 
 /**
  * Finds the manifest that governs the directory the tool was invoked from
- * and loads it. The search walks up to the filesystem root, so any
+ * and reads it. The search walks up to the filesystem root, so any
  * subdirectory of a project is a valid place to run a command from.
+ *
+ * The manifest is data, so it is parsed rather than executed: nothing in a
+ * project's repository runs to answer what its sandboxes look like, and a
+ * project in any language can carry one without hosting a file from
+ * somebody else's toolchain.
  */
 export class ManifestLoader {
-  async loadFrom(startDirectory) {
+  loadFrom(startDirectory) {
     const manifestPath = this.findUpwards(startDirectory);
     if (!manifestPath) {
       throw new SbxError(
@@ -20,28 +24,22 @@ export class ManifestLoader {
         'Run `sbx init` here to write one, or move to a project that has one.',
       );
     }
-    const module = await this.importManifest(manifestPath);
-    if (!module.default) {
-      throw new SbxError(
-        `${manifestPath} does not export its configuration.`,
-        'The file must end with `export default { … }`.',
-      );
-    }
-    return new ProjectManifest(module.default, path.dirname(manifestPath));
+    return new ProjectManifest(this.parse(manifestPath), path.dirname(manifestPath));
   }
 
-  /**
-   * A manifest is executed, not parsed, so it can fail either by being
-   * invalid JavaScript or by throwing while it runs. Both arrive here as
-   * messages that name neither the file nor the fact that it is a manifest.
-   */
-  async importManifest(manifestPath) {
+  parse(manifestPath) {
+    let contents;
     try {
-      return await import(pathToFileURL(manifestPath).href);
+      contents = fs.readFileSync(manifestPath, 'utf8');
+    } catch (error) {
+      throw new SbxError(`${manifestPath} could not be read: ${error.message}`);
+    }
+    try {
+      return JSON.parse(contents);
     } catch (error) {
       throw new SbxError(
-        `${manifestPath} could not be loaded: ${error.message}`,
-        'It is a JavaScript module — check it runs on its own with `node <path>`.',
+        `${manifestPath} is not valid JSON: ${error.message}`,
+        'JSON allows no comments and no trailing commas.',
       );
     }
   }

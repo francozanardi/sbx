@@ -8,25 +8,27 @@ config, hooks.
 
 Two dev servers and a database.
 
-```js
-// sandbox.config.mjs
-export default {
-  name: 'acme',
-  ports: {
-    base: { api: 3000, web: 5173, postgres: 5432 },
-    env: { web: 'VITE_PORT' },   // api and postgres default to API_PORT, POSTGRES_PORT
+```json
+{
+  "name": "acme",
+  "ports": {
+    "base": { "api": 3000, "web": 5173, "postgres": 5432 },
+    "env": { "web": "VITE_PORT" }
   },
-  compose: 'sandbox/compose.yml',
-  env: [{ from: 'sandbox/templates/api.env', to: 'apps/api/.env' }],
-  generate: { SESSION_SECRET: 32 },
-  hooks: {
-    install: 'pnpm install',
-    migrate: 'pnpm --filter api db:migrate',
-    seed: 'node sandbox/seed.mjs',
-    reset: 'node sandbox/reset.mjs',
-  },
-};
+  "compose": "sandbox/compose.yml",
+  "env": [{ "from": "sandbox/templates/api.env", "to": "apps/api/.env" }],
+  "generate": { "SESSION_SECRET": 32 },
+  "hooks": {
+    "install": "pnpm install",
+    "migrate": "pnpm --filter api db:migrate",
+    "seed": "node sandbox/seed.mjs",
+    "reset": "node sandbox/reset.mjs"
+  }
+}
 ```
+
+Only `web` names its variable. `api` and `postgres` default to `API_PORT` and
+`POSTGRES_PORT`.
 
 ```
 # sandbox/templates/api.env
@@ -51,19 +53,19 @@ Same shape, different toolchain. The virtualenv lives inside the sandbox; uv's
 package cache is global and linked, so the second sandbox installs almost
 instantly.
 
-```js
-export default {
-  name: 'billing',
-  ports: { base: { api: 8000, mysql: 3306 } },
-  compose: 'sandbox/compose.yml',
-  env: [{ from: 'sandbox/templates/api.env', to: '.env' }],
-  hooks: {
-    install: 'uv sync',
-    migrate: 'uv run alembic upgrade head',
-    seed: 'uv run python -m sandbox.seed',
-    reset: 'uv run python -m sandbox.reset',
-  },
-};
+```json
+{
+  "name": "billing",
+  "ports": { "base": { "api": 8000, "mysql": 3306 } },
+  "compose": "sandbox/compose.yml",
+  "env": [{ "from": "sandbox/templates/api.env", "to": ".env" }],
+  "hooks": {
+    "install": "uv sync",
+    "migrate": "uv run alembic upgrade head",
+    "seed": "uv run python -m sandbox.seed",
+    "reset": "uv run python -m sandbox.reset"
+  }
+}
 ```
 
 ```yaml
@@ -93,25 +95,25 @@ No services to declare, so `compose` is absent and `create` skips that step.
 The database is a file inside the sandbox: isolation is free and teardown is
 automatic.
 
-```js
-export default {
-  name: 'ingest',
-  ports: { base: { http: 8080 } },
-  env: [{ from: 'sandbox/templates/app.env', to: '.env' }],
-
-  // Cargo's registry cache is global, but target/ is per-directory and large.
-  // A shared compilation cache keeps a new sandbox from recompiling the world;
-  // sccache avoids the lock contention a shared target/ would cause.
-  variables: { RUSTC_WRAPPER: 'sccache' },
-
-  hooks: {
-    install: 'cargo fetch',
-    migrate: 'cargo run --bin migrate',
-    seed: 'cargo run --bin seed',
-    reset: 'rm -f data/ingest.db && cargo run --bin migrate',
-  },
-};
+```json
+{
+  "name": "ingest",
+  "ports": { "base": { "http": 8080 } },
+  "env": [{ "from": "sandbox/templates/app.env", "to": ".env" }],
+  "variables": { "RUSTC_WRAPPER": "sccache" },
+  "hooks": {
+    "install": "cargo fetch",
+    "migrate": "cargo run --bin migrate",
+    "seed": "cargo run --bin seed",
+    "reset": "rm -f data/ingest.db && cargo run --bin migrate"
+  }
+}
 ```
+
+Cargo's registry cache is global, but `target/` is per-directory and large. The
+`RUSTC_WRAPPER` variable points every sandbox at a shared compilation cache so
+a new one does not recompile the world; sccache avoids the lock contention a
+shared `target/` would cause.
 
 ```
 # sandbox/templates/app.env

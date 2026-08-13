@@ -4,7 +4,7 @@ const DEFAULT_STRIDE = 10;
 const DEFAULT_MAX_SLOTS = 9;
 
 /**
- * Validated view over a project's `sandbox.config.mjs`. Every accessor
+ * Validated view over a project's `sandbox.config.json`. Every accessor
  * returns a value the rest of the tool can use without re-checking it;
  * anything missing or malformed fails here, naming the offending field.
  *
@@ -20,11 +20,11 @@ export class ProjectManifest {
 
   validate() {
     if (typeof this.raw?.name !== 'string' || this.raw.name.length === 0) {
-      throw new SbxError('sandbox.config.mjs: `name` is missing.', 'It must be a non-empty string — it names the state directory and the Compose projects.');
+      throw new SbxError('sandbox.config.json: `name` is missing.', 'It must be a non-empty string — it names the state directory and the Compose projects.');
     }
     const ports = this.raw.ports;
     if (!ports || typeof ports !== 'object') {
-      throw new SbxError('sandbox.config.mjs: `ports` is missing.', 'Declare at least `ports.base`, mapping one role to the port it uses today.');
+      throw new SbxError('sandbox.config.json: `ports` is missing.', 'Declare at least `ports.base`, mapping one role to the port it uses today.');
     }
     this.validatePortRoles(ports);
   }
@@ -32,11 +32,11 @@ export class ProjectManifest {
   validatePortRoles(ports) {
     const base = ports.base;
     if (!base || Object.keys(base).length === 0) {
-      throw new SbxError('sandbox.config.mjs: `ports.base` is empty.', 'Map at least one role to the port it uses today, as in `base: { api: 3000 }`.');
+      throw new SbxError('sandbox.config.json: `ports.base` is empty.', 'Map at least one role to the port it uses today, as in `"base": { "api": 3000 }`.');
     }
     for (const [role, port] of Object.entries(base)) {
       if (!Number.isInteger(port) || port < 1 || port > 65535) {
-        throw new SbxError(`sandbox.config.mjs: \`ports.base.${role}\` is not a port number.`, 'It must be an integer between 1 and 65535.');
+        throw new SbxError(`sandbox.config.json: \`ports.base.${role}\` is not a port number.`, 'It must be an integer between 1 and 65535.');
       }
     }
   }

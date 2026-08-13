@@ -64,7 +64,7 @@ export class SandboxCreator {
       if (shared.length > 0) {
         throw new SbxError(
           `Slot ${slot} would share ports ${shared.join(', ')} with sandbox "${other.name}".`,
-          'Raise `ports.stride` in sandbox.config.mjs — it must exceed the widest gap between two base ports.',
+          'Raise `ports.stride` in sandbox.config.json — it must exceed the widest gap between two base ports.',
         );
       }
     }

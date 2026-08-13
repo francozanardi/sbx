@@ -39,8 +39,18 @@ export class SandboxRemover {
 
   describe(branches, changes) {
     const parts = branches.map((branch) => `${branch.commits} commit(s) on ${branch.branch}`);
-    if (changes.length > 0) parts.push(`${changes.length} uncommitted file(s)`);
+    if (changes.length > 0) parts.push(`uncommitted ${this.nameFiles(changes)}`);
     return parts.join(', ');
+  }
+
+  /**
+   * Naming the files is what separates a lockfile the install hook rewrote
+   * from work worth keeping, which is the whole decision being asked for.
+   */
+  nameFiles(changes) {
+    const paths = changes.map((change) => change.slice(3));
+    if (paths.length <= 3) return paths.join(', ');
+    return `${paths.slice(0, 3).join(', ')} and ${paths.length - 3} more`;
   }
 
   destroyServices(record) {

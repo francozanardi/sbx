@@ -2,7 +2,7 @@
 
 Every sbx failure prints two lines: what went wrong, and what to do about it.
 A message starting with `unexpected failure:` is a defect in the tool rather
-than a problem with the project — re-run with `SBX_DEBUG=1` for the stack.
+than a problem with the project. Re-run with `SBX_DEBUG=1` for the stack.
 
 | Message | Cause and fix |
 |---|---|
@@ -16,14 +16,14 @@ than a problem with the project — re-run with `SBX_DEBUG=1` for the stack.
 | `A sandbox named "x" already exists` | Reuse it, or `sbx delete x` first |
 | `"x" was left half-created` | A step after the clone failed. `sbx delete x` and retry. The warning only appears for entries that run created, never for a healthy sandbox |
 | `The \`install\` hook failed: …` | The hook's command exited non-zero. Its own output is printed above the message |
-| `\`X\` is not installed, or not on PATH` | An external program is missing — `git`, `docker`, or whatever a hook invoked |
+| `\`X\` is not installed, or not on PATH` | An external program is missing: `git`, `docker`, or whatever a hook invoked |
 | `Docker is not installed, or not on PATH` | The manifest declares `compose`. Install Docker, or drop the declaration |
 | `Docker is installed but its daemon is not answering` | Start it. `sbx doctor` reports this before a create spends time on it |
 | `The services did not start` | Compose printed the detail above. Usually a wrong healthcheck, or none where the service is slower than `--wait` assumes |
 | `No free slot left: all N are in use` | Delete a sandbox, or raise `ports.maxSlots` |
 | `The sandbox registry … is not valid JSON` | `~/.sbx/<project>/state.json` was hand-edited. Fix or delete it. The sandboxes and containers survive; their names do not |
-| `sandbox.config.mjs: … could not be loaded` | The manifest is a JavaScript module that either fails to parse or throws while running. Check it with `node <path>` |
-| `No sandbox.config.mjs found in … or any parent` | Not inside a project that declares sandboxes. `sbx init` writes a starting manifest |
+| `sandbox.config.json is not valid JSON` | The manifest failed to parse. JSON allows no comments and no trailing commas |
+| `No sandbox.config.json found in … or any parent` | Not inside a project that declares sandboxes. `sbx init` writes a starting manifest |
 
 ## Diagnosing before it breaks
 

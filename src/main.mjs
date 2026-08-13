@@ -23,7 +23,7 @@ try {
   let commands = standalone;
   if (!standalone.has(tokens[0])) {
     try {
-      commands = registry.forProject(await new ManifestLoader().loadFrom(process.cwd()));
+      commands = registry.forProject(new ManifestLoader().loadFrom(process.cwd()));
     } catch (error) {
       // Asking for help in a directory with no manifest is how someone
       // finds out `sbx init` exists, so it must not be a hard failure.

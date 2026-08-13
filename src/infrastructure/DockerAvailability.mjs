@@ -33,7 +33,7 @@ export class DockerAvailability {
     if (error instanceof MissingProgramError) {
       return new SbxError(
         'Docker is not installed, or not on PATH.',
-        'This project declares services in its manifest. Install Docker, or remove `compose` from sandbox.config.mjs.',
+        'This project declares services in its manifest. Install Docker, or remove `compose` from sandbox.config.json.',
       );
     }
     return new SbxError(

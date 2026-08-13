@@ -22,7 +22,7 @@ export class SlotAllocator {
     }
     throw new SbxError(
       `No free slot left: all ${this.maxSlots} are in use.`,
-      'Delete a sandbox, or raise `ports.maxSlots` in sandbox.config.mjs.',
+      'Delete a sandbox, or raise `ports.maxSlots` in sandbox.config.json.',
     );
   }
 }

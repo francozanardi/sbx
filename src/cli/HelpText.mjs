@@ -37,7 +37,7 @@ export class HelpText {
         summary: 'Delete a sandbox: services, volumes, clone, registry entry. Refuses while it holds unsaved work.',
       },
       { usage: 'sbx doctor', summary: 'Check this project for anything that would break `sbx create`.' },
-      { usage: 'sbx init', summary: 'Write a starting sandbox.config.mjs into this project.' },
+      { usage: 'sbx init', summary: 'Write a starting sandbox.config.json into this project.' },
     ];
   }
 
@@ -60,7 +60,7 @@ export class HelpText {
   printGettingStarted() {
     this.terminal.heading('Getting started');
     this.terminal.info('  Inside a repository:');
-    this.terminal.info('    sbx init      Write a starting sandbox.config.mjs here.');
+    this.terminal.info('    sbx init      Write a starting sandbox.config.json here.');
     this.terminal.info('    sbx doctor    Report what would still break `sbx create`.');
     this.terminal.blank();
     this.terminal.info('  For agents, install the guides that cover setup and daily use:');
