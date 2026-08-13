@@ -14,6 +14,10 @@ export class HelpText {
         usage: 'sbx create <name> [--branch=<branch>] [--from=<ref>] [--no-hooks]',
         summary: 'Create a sandbox: worktree, port block, services, seeded data.',
       },
+      {
+        usage: 'sbx sync <name> [--no-hooks]',
+        summary: 'Bring an existing sandbox up to date: re-render its env files, start its services, re-run install and migrate.',
+      },
       { usage: 'sbx list', summary: 'List the sandboxes of this project.' },
       { usage: 'sbx info <name>', summary: 'Show a sandbox and its port block.' },
       { usage: 'sbx up <name>', summary: "Start a sandbox's services." },

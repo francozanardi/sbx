@@ -17,6 +17,7 @@ up from the working directory.
 
 ```bash
 sbx create <name>          # worktree, ports, services, install/migrate/seed
+sbx sync <name>            # re-render env, start services, re-run install/migrate
 sbx list                   # every sandbox, its slot, its service state
 sbx info <name>            # one sandbox and the port each role got
 sbx up <name>              # start its services
@@ -30,7 +31,13 @@ sbx doctor                 # check what would break a create
 ```
 
 `create` takes `--branch=<name>` (default: the sandbox name), `--from=<ref>`
-(default: the checkout's current branch) and `--no-hooks`.
+(default: the checkout's current branch) and `--no-hooks`. `sync` takes
+`--no-hooks` too.
+
+Reach for `sync` after anything that changes what the project declares: a
+merge that adds a dependency or a migration, an edited env template, a
+credential filled in. It repeats only what is safe to repeat, so a sandbox
+keeps its data — seeding stays behind `sbx seed`.
 
 `delete` **keeps the branch** unless given `--delete-branch`. Teardown never
 destroys work.

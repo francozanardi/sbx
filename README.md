@@ -57,6 +57,7 @@ sbx run sb-1 -- pnpm dev   # or whatever your dev command is
 | Command | |
 |---|---|
 | `sbx create <name>` | New copy: worktree, services, config, dependencies, seeded data |
+| `sbx sync <name>` | Bring an existing copy up to date: config, services, dependencies, migrations |
 | `sbx run <name> -- <cmd>` | Run a command inside it |
 | `sbx list` | Every copy and whether its services are up |
 | `sbx info <name>` | Where it lives and which ports it got |

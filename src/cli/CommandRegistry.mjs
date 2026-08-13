@@ -9,6 +9,7 @@ import { ListCommand } from '../commands/ListCommand.mjs';
 import { OpenCommand } from '../commands/OpenCommand.mjs';
 import { RunCommand } from '../commands/RunCommand.mjs';
 import { SeedCommand } from '../commands/SeedCommand.mjs';
+import { SyncCommand } from '../commands/SyncCommand.mjs';
 import { UpCommand } from '../commands/UpCommand.mjs';
 import { EnvironmentFileWriter } from '../application/EnvironmentFileWriter.mjs';
 import { HookRunner } from '../application/HookRunner.mjs';
@@ -16,6 +17,7 @@ import { ManifestScaffolder } from '../application/ManifestScaffolder.mjs';
 import { ProjectWorkspace } from '../application/ProjectWorkspace.mjs';
 import { SandboxCreator } from '../application/SandboxCreator.mjs';
 import { SandboxRemover } from '../application/SandboxRemover.mjs';
+import { SandboxSynchronizer } from '../application/SandboxSynchronizer.mjs';
 import { SetupInspector } from '../application/SetupInspector.mjs';
 import { EcosystemCatalog } from '../domain/EcosystemCatalog.mjs';
 import { DockerAvailability } from '../infrastructure/DockerAvailability.mjs';
@@ -55,10 +57,16 @@ export class CommandRegistry {
     const secretGenerator = new SecretGenerator();
     const templateRenderer = new TemplateRenderer();
 
+    const synchronizer = new SandboxSynchronizer({
+      workspace,
+      environmentFileWriter: new EnvironmentFileWriter(templateRenderer),
+      hookRunner,
+      terminal: this.terminal,
+    });
     const creator = new SandboxCreator({
       workspace,
       worktrees,
-      environmentFileWriter: new EnvironmentFileWriter(templateRenderer),
+      synchronizer,
       hookRunner,
       secretGenerator,
       portProbe,
@@ -76,6 +84,7 @@ export class CommandRegistry {
 
     return new Map([
       ['create', new CreateCommand({ workspace, creator, worktrees, reporter, terminal: this.terminal })],
+      ['sync', new SyncCommand({ workspace, synchronizer, reporter, terminal: this.terminal })],
       ['list', new ListCommand({ workspace, terminal: this.terminal })],
       ['info', new InfoCommand({ workspace, reporter })],
       ['up', new UpCommand({ workspace, reporter, terminal: this.terminal })],

@@ -8,14 +8,18 @@ import { SbxError } from '../domain/SbxError.mjs';
  * nothing else is using, rendered env files, its stateful services, and
  * whatever the project's install, migrate and seed hooks do to it.
  *
+ * What is unique to a first run lives here — allocating the slot, cutting
+ * the worktree, minting the secrets, seeding the data. Everything that a
+ * later run could repeat is delegated, so the two paths cannot drift.
+ *
  * The registry entry is written as soon as the worktree exists, so a run
  * that fails halfway still leaves something the delete command can clean up.
  */
 export class SandboxCreator {
-  constructor({ workspace, worktrees, environmentFileWriter, hookRunner, secretGenerator, portProbe, terminal }) {
+  constructor({ workspace, worktrees, synchronizer, hookRunner, secretGenerator, portProbe, terminal }) {
     this.workspace = workspace;
     this.worktrees = worktrees;
-    this.environmentFileWriter = environmentFileWriter;
+    this.synchronizer = synchronizer;
     this.hookRunner = hookRunner;
     this.secretGenerator = secretGenerator;
     this.portProbe = portProbe;
@@ -30,11 +34,8 @@ export class SandboxCreator {
     await this.rejectBusyPorts(slot, name);
 
     const record = this.provisionWorktree(name, slot, branch, startPoint);
-    const variables = this.workspace.environmentFor(record);
-
-    this.writeEnvironmentFiles(record, variables);
-    this.startServices(record, variables);
-    if (runHooks) this.runLifecycleHooks(record, variables);
+    const variables = this.synchronizer.sync(record, { runHooks });
+    if (runHooks) this.seed(record, variables);
 
     return record;
   }
@@ -105,21 +106,7 @@ export class SandboxCreator {
     return minted;
   }
 
-  writeEnvironmentFiles(record, variables) {
-    this.workspace.secrets.ensureExists();
-    const written = this.environmentFileWriter.write(this.workspace.manifest, record.worktree, variables);
-    for (const file of written) this.terminal.step(`rendered ${file}`);
-  }
-
-  startServices(record, variables) {
-    if (!this.workspace.manifest.composeFile()) return;
-    this.terminal.step('starting services');
-    this.workspace.composeStackFor(record).start(variables);
-  }
-
-  runLifecycleHooks(record, variables) {
-    for (const hookName of ['install', 'migrate', 'seed']) {
-      this.hookRunner.run(this.workspace.manifest, hookName, record.worktree, variables);
-    }
+  seed(record, variables) {
+    this.hookRunner.run(this.workspace.manifest, 'seed', record.worktree, variables);
   }
 }
