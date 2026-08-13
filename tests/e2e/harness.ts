@@ -19,8 +19,10 @@ export interface Fixture {
   projectDir: string;
   /** Fake HOME the CLI reads; every `~/.sbx` and `~/sandboxes` write goes under it. */
   home: string;
-  /** Runs the compiled CLI in this fixture with a clean env. */
+  /** Runs the compiled CLI from the project directory with a clean env. */
   sbx: (...args: string[]) => RunResult;
+  /** The same, from any directory — for what sbx does when run from inside a sandbox. */
+  sbxIn: (cwd: string, ...args: string[]) => RunResult;
   /** Path a sandbox of the given name would land at, per HomePath's default layout. */
   sandboxPath: (name: string) => string;
   /** Deletes both the project dir and the fake HOME. */
@@ -59,14 +61,15 @@ export function createFixture(options: FixtureOptions): Fixture {
   }
   initGitRepo(projectDir);
 
-  const sbx = (...args: string[]): RunResult => {
+  const sbxIn = (cwd: string, ...args: string[]): RunResult => {
     const result = spawnSync('node', [BIN, ...args], {
-      cwd: projectDir,
+      cwd,
       env: cleanEnv(home),
       encoding: 'utf8',
     });
     return toRunResult(result);
   };
+  const sbx = (...args: string[]): RunResult => sbxIn(projectDir, ...args);
 
   const sandboxPath = (name: string): string => path.join(home, 'sandboxes', String(options.manifest.name), name);
 
@@ -74,7 +77,7 @@ export function createFixture(options: FixtureOptions): Fixture {
     fs.rmSync(base, { recursive: true, force: true });
   };
 
-  return { projectDir, home, sbx, sandboxPath, cleanup };
+  return { projectDir, home, sbx, sbxIn, sandboxPath, cleanup };
 }
 
 function writeManifest(projectDir: string, manifest: Record<string, unknown>): void {

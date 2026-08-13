@@ -155,17 +155,16 @@ export class GitClones {
 
   private nameRemotes(destinationPath: string): void {
     this.processRunner.runProgram('git', ['remote', 'rename', 'origin', 'host'], { cwd: destinationPath });
-    const upstream = this.originUrl();
+    const upstream = this.remoteUrl('origin');
     if (upstream) {
       this.processRunner.runProgram('git', ['remote', 'add', 'origin', upstream], { cwd: destinationPath });
     }
   }
 
-  private originUrl(): string | null {
+  /** Where a remote points, or null when the repository has no such remote. */
+  remoteUrl(name: string, directory: string = this.repositoryDirectory): string | null {
     try {
-      return this.processRunner.captureProgram('git', ['remote', 'get-url', 'origin'], {
-        cwd: this.repositoryDirectory,
-      });
+      return this.processRunner.captureProgram('git', ['remote', 'get-url', name], { cwd: directory });
     } catch {
       return null;
     }

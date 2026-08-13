@@ -69,6 +69,36 @@ export class ProjectWorkspace {
     return path.join(this.sandboxRoot(), sandboxName);
   }
 
+  /**
+   * The sandbox this command was invoked from, or null in the host
+   * checkout.
+   *
+   * A sandbox carries the project's manifest like any other clone, so
+   * running sbx from inside one loads that manifest and resolves the same
+   * per-project registry. Everything keyed by name keeps working; what
+   * silently moves is the repository the tool treats as the host.
+   */
+  enclosingSandbox(): SandboxRecord | null {
+    const root = path.resolve(this.manifest.rootDirectory);
+    return this.registry.list().find((record) => path.resolve(record.directory) === root) ?? null;
+  }
+
+  /**
+   * @throws when the command would write to the host's repository but was
+   *   run from inside a sandbox, where "the host" is a different clone.
+   */
+  requireHostCheckout(action: string): void {
+    const enclosing = this.enclosingSandbox();
+    if (!enclosing) return;
+    const host = this.clones.remoteUrl('host');
+    throw new SbxError(
+      `This directory is sandbox "${enclosing.name}", not the project's host checkout, and ${action} from inside one writes to the wrong repository.`,
+      host
+        ? `A sandbox created here would be cloned from "${enclosing.name}" and register its \`sbx-\` remote inside it, leaving the host unaware of either. Run this from the host checkout at ${host}.`
+        : `A sandbox created here would be cloned from "${enclosing.name}" and register its \`sbx-\` remote inside it, leaving the host unaware of either. Run this from the host checkout.`,
+    );
+  }
+
   /** True when the sandbox's clone is still where the registry says it is. */
   hasClone(record: SandboxRecord): boolean {
     return fs.existsSync(record.directory);

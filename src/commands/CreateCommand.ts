@@ -33,6 +33,7 @@ export class CreateCommand implements Command {
   }
 
   async execute(argumentList: ArgumentList): Promise<void> {
+    this.workspace.requireHostCheckout('creating a sandbox');
     const name = new SandboxName(argumentList.require(0, 'a sandbox name'));
     const options: CreateOptions = {
       branch: argumentList.flag('branch'),

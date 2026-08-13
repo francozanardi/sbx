@@ -62,6 +62,7 @@ export class SetupInspector {
   async inspect(): Promise<CheckResult[]> {
     const variables = this.previewVariables();
     const checks: [string, () => Promise<Produced> | Produced][] = [
+      ['checkout', () => this.checkNotInsideSandbox()],
       ['git repository', () => this.checkRepository()],
       ['ports', () => this.checkPorts()],
       ['secrets', () => this.checkSecrets()],
@@ -122,6 +123,21 @@ export class SetupInspector {
   private nextSlot(): number {
     const allocator = new SlotAllocator(this.workspace.manifest.maxSlots());
     return allocator.allocate(this.workspace.registry.list().map((record) => record.slot));
+  }
+
+  /**
+   * Doctor reports on whichever checkout it was run from, and from inside
+   * a sandbox that is the wrong one: the ports it calls free are the ports
+   * of a machine it is already using, and `sbx create` is refused here.
+   */
+  private checkNotInsideSandbox(): CheckResult | null {
+    const enclosing = this.workspace.enclosingSandbox();
+    if (!enclosing) return null;
+    return {
+      name: 'checkout',
+      ok: false,
+      detail: `this directory is sandbox "${enclosing.name}", not the host checkout — run sbx from the host so it reports on the repository sandboxes are cloned from`,
+    };
   }
 
   private checkRepository(): CheckResult {

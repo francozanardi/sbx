@@ -25,6 +25,7 @@ export class DeleteCommand implements Command {
   }
 
   execute(argumentList: ArgumentList): void {
+    this.workspace.requireHostCheckout('deleting a sandbox');
     const name = argumentList.require(0, 'a sandbox name');
     const record = this.workspace.registry.get(name);
     this.terminal.heading(`Deleting sandbox ${name}`);
