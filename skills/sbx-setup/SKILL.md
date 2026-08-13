@@ -116,9 +116,10 @@ discoverable.
 }
 ```
 
-Shell command lines, run from the sandbox root with the variables in the
-environment. `create` runs install → migrate → seed. `sbx seed --reset`
-runs reset → seed.
+Shell command lines, run from the sandbox root with the variables in
+the environment. `create` runs install → migrate → seed. `sbx rebuild
+<name>` re-runs install and migrate; `--data` adds reset → seed; `--hard`
+also destroys the services and their volumes first.
 
 ```bash
 sbx doctor

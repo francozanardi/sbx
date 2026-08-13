@@ -7,17 +7,16 @@ import { InfoCommand } from '../commands/InfoCommand.mjs';
 import { InitCommand } from '../commands/InitCommand.mjs';
 import { ListCommand } from '../commands/ListCommand.mjs';
 import { OpenCommand } from '../commands/OpenCommand.mjs';
+import { RebuildCommand } from '../commands/RebuildCommand.mjs';
 import { RunCommand } from '../commands/RunCommand.mjs';
-import { SeedCommand } from '../commands/SeedCommand.mjs';
-import { SyncCommand } from '../commands/SyncCommand.mjs';
 import { UpCommand } from '../commands/UpCommand.mjs';
 import { EnvironmentFileWriter } from '../application/EnvironmentFileWriter.mjs';
 import { HookRunner } from '../application/HookRunner.mjs';
 import { ManifestScaffolder } from '../application/ManifestScaffolder.mjs';
 import { ProjectWorkspace } from '../application/ProjectWorkspace.mjs';
 import { SandboxCreator } from '../application/SandboxCreator.mjs';
+import { SandboxRebuilder } from '../application/SandboxRebuilder.mjs';
 import { SandboxRemover } from '../application/SandboxRemover.mjs';
-import { SandboxSynchronizer } from '../application/SandboxSynchronizer.mjs';
 import { SetupInspector } from '../application/SetupInspector.mjs';
 import { EcosystemCatalog } from '../domain/EcosystemCatalog.mjs';
 import { DockerAvailability } from '../infrastructure/DockerAvailability.mjs';
@@ -57,7 +56,7 @@ export class CommandRegistry {
     const secretGenerator = new SecretGenerator();
     const templateRenderer = new TemplateRenderer();
 
-    const synchronizer = new SandboxSynchronizer({
+    const rebuilder = new SandboxRebuilder({
       workspace,
       environmentFileWriter: new EnvironmentFileWriter(templateRenderer),
       hookRunner,
@@ -66,7 +65,7 @@ export class CommandRegistry {
     const creator = new SandboxCreator({
       workspace,
       clones,
-      synchronizer,
+      rebuilder,
       hookRunner,
       secretGenerator,
       portProbe,
@@ -84,12 +83,11 @@ export class CommandRegistry {
 
     return new Map([
       ['create', new CreateCommand({ workspace, creator, clones, reporter, terminal: this.terminal })],
-      ['sync', new SyncCommand({ workspace, synchronizer, reporter, terminal: this.terminal })],
+      ['rebuild', new RebuildCommand({ workspace, rebuilder, reporter, terminal: this.terminal })],
       ['list', new ListCommand({ workspace, terminal: this.terminal })],
       ['info', new InfoCommand({ workspace, reporter })],
       ['up', new UpCommand({ workspace, reporter, terminal: this.terminal })],
       ['down', new DownCommand({ workspace, terminal: this.terminal })],
-      ['seed', new SeedCommand({ workspace, hookRunner, terminal: this.terminal })],
       ['run', new RunCommand({ workspace, processRunner: this.processRunner })],
       ['open', new OpenCommand({ workspace, terminal: this.terminal })],
       ['code', new CodeCommand({ workspace, processRunner: this.processRunner })],

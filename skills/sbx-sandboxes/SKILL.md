@@ -37,7 +37,9 @@ walking up from the working directory.
 
 ```bash
 sbx create <name>          # clone, ports, services, install/migrate/seed
-sbx sync <name>            # re-render env, start services, re-run install/migrate
+sbx rebuild <name>         # re-render env, start services, re-run install/migrate
+sbx rebuild <name> --data  # also re-run reset + seed
+sbx rebuild <name> --hard  # also destroy services + volumes first
 sbx open <name>            # subshell in the sandbox's directory with its env loaded
 sbx code <name>            # open the sandbox in $SBX_EDITOR (default: code)
 sbx run <name> -- <cmd>    # single command with the sandbox's env, for scripts
@@ -45,7 +47,6 @@ sbx list                   # every sandbox, its slot, its service state
 sbx info <name>            # one sandbox and the port each role got
 sbx up <name>              # start its services
 sbx down <name>            # stop them, keeping the data
-sbx seed <name> --reset    # delete its data and run the seed hook again
 sbx delete <name>          # services, volumes, clone, host remote, registry entry
 sbx doctor                 # check what would break a create
 ```
@@ -53,12 +54,16 @@ sbx doctor                 # check what would break a create
 `create` accepts `--from=<ref>` to pick a starting point other than the
 remote's default branch, and `--branch=<name>` to create a local branch
 at that point. Both are for per-task sandboxes and are not needed for
-lanes. `create` and `sync` both accept `--no-hooks`.
+lanes. `create` and `rebuild` both accept `--no-hooks`.
 
-Run `sync` after anything that changes what the project declares: a merge
-that adds a dependency or a migration, an edited env template, a
-credential filled in. It repeats only what is safe to repeat; a sandbox
-keeps its data. `--reset` on `sbx seed` is what wipes the data.
+`rebuild` has three modes, each a strict superset of the previous:
+
+- Default: install and migrate. Non-destructive, and the mode to reach
+  for after a merge that adds a dependency or a forward migration.
+- `--data`: also reset and seed. Rewrites the seeded data.
+- `--hard`: also destroys the services and their volumes first. Use it
+  when a branch removes a migration and the schema has to be rebuilt,
+  or when the state has drifted in a way `--data` cannot fix.
 
 `delete` refuses to run while the sandbox holds commits no remote has, or
 files that are not committed, and prints how to recover them. Push the
@@ -127,22 +132,21 @@ sbx run lane-a -- git fetch origin
 sbx run lane-a -- git switch -c <task-branch> origin/main
 ```
 
-If the new branch adds dependencies or migrations, run `sbx sync`:
+Pick the right rebuild mode for what the new branch needs:
 
 ```bash
-sbx sync lane-a
+sbx rebuild lane-a          # new dependencies or forward migrations
+sbx rebuild lane-a --data   # also reseed the data
+sbx rebuild lane-a --hard   # also rebuild services and schema
 ```
-
-If the task needs a fresh database, run `sbx seed lane-a --reset`. That
-deletes the sandbox's data and runs the seed hook again.
 
 Ports stay stable across every task in the lane, which matters when one
 has to be registered somewhere external, like an OAuth redirect URI
 allowlist.
 
-Do not run `sbx sync` while an agent is working in the lane. Rebasing
-under a running agent changes files it did not touch, and it will try to
-"fix" what it finds. Sync between tasks, never during.
+Do not run `sbx rebuild` while an agent is working in the lane. It
+rewrites files the agent did not touch, and the agent will try to "fix"
+what it finds. Rebuild between tasks, never during.
 
 ## Per-task sandboxes
 

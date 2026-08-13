@@ -15,14 +15,13 @@ export class HelpText {
         summary: 'Create a sandbox: clone, port block, services, seeded data. Default: fetch origin and check out its default branch. --branch creates a local branch of that name. --from picks a starting ref.',
       },
       {
-        usage: 'sbx sync <name> [--no-hooks]',
-        summary: 'Bring an existing sandbox up to date: re-render its env files, start its services, re-run install and migrate.',
+        usage: 'sbx rebuild <name> [--data | --hard] [--no-hooks]',
+        summary: 'Bring an existing sandbox in line with the current project. Default: install and migrate. With --data: also reset and seed, replacing the seeded data. With --hard: also destroy services and volumes first, for cases where the database has to be rebuilt (a branch that removes a migration, drifted state).',
       },
       { usage: 'sbx list', summary: 'List the sandboxes of this project.' },
       { usage: 'sbx info <name>', summary: 'Show a sandbox and its port block.' },
       { usage: 'sbx up <name>', summary: "Start a sandbox's services." },
       { usage: 'sbx down <name>', summary: "Stop a sandbox's services, keeping its data." },
-      { usage: 'sbx seed <name> [--reset]', summary: 'Seed a sandbox. With --reset, wipe its data first.' },
       {
         usage: 'sbx run <name> -- <command> [args...]',
         summary: "Run a command in a sandbox's directory and environment.",

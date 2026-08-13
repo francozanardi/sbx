@@ -16,10 +16,10 @@ import { SbxError } from '../domain/SbxError.mjs';
  * that fails halfway still leaves something the delete command can clean up.
  */
 export class SandboxCreator {
-  constructor({ workspace, clones, synchronizer, hookRunner, secretGenerator, portProbe, terminal }) {
+  constructor({ workspace, clones, rebuilder, hookRunner, secretGenerator, portProbe, terminal }) {
     this.workspace = workspace;
     this.clones = clones;
-    this.synchronizer = synchronizer;
+    this.rebuilder = rebuilder;
     this.hookRunner = hookRunner;
     this.secretGenerator = secretGenerator;
     this.portProbe = portProbe;
@@ -34,7 +34,7 @@ export class SandboxCreator {
     await this.rejectBusyPorts(slot, name);
 
     const record = this.provisionClone(name, slot, { branch, startPoint });
-    const variables = this.synchronizer.sync(record, { runHooks });
+    const variables = this.rebuilder.rebuild(record, { runHooks, mode: 'code' });
     if (runHooks) this.seed(record, variables);
 
     return record;

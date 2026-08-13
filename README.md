@@ -89,14 +89,15 @@ the host through these remotes.
 | Command | |
 |---|---|
 | `sbx create <name>` | New copy. Fetches `origin` and lands on its default branch |
-| `sbx sync <name>` | Update an existing copy: config, services, dependencies, migrations |
+| `sbx rebuild <name>` | Bring an existing copy in line with the project: install and migrate |
+| `sbx rebuild <name> --data` | Also reset and re-seed the data |
+| `sbx rebuild <name> --hard` | Also destroy services and volumes first, then everything above |
 | `sbx open <name>` | Interactive subshell inside the copy: its directory as cwd, its env loaded |
 | `sbx code <name>` | Open the copy in `$SBX_EDITOR` (default `code`). No env is injected |
 | `sbx run <name> -- <cmd>` | Run a single command inside the copy, for scripts and one-shots |
 | `sbx list` | Every copy and whether its services are up |
 | `sbx info <name>` | Where it lives and which ports it got |
 | `sbx up <name>` / `sbx down <name>` | Start or stop its services |
-| `sbx seed <name> --reset` | Delete the copy's DB data and run its seed again |
 | `sbx delete <name>` | Remove it. Refuses while it holds unpushed or uncommitted work |
 | `sbx doctor` | Check what would break a create |
 
@@ -129,29 +130,42 @@ This opens the lane's directory in your editor. It does not inject any
 environment. In each integrated terminal that needs the lane's ports or
 credentials, run `sbx open lane-a` and work from there.
 
-### Move a lane to a different branch
+### Git in a lane
 
-Inside the lane, switch branches the way you would in any git clone:
+A lane is a normal git clone with a normal working tree. Git commands
+work as they always do, against the project's usual remote:
 
 ```bash
 sbx open lane-a
 git fetch origin
 git switch -c feat/x origin/main
+# edit, commit
+git push -u origin feat/x
 ```
 
-If the new branch adds dependencies or migrations, install and run them
-with `sbx sync`:
+`sbx rebuild` runs the install, migrate, seed and reset hooks declared
+in your manifest. These are the same commands you would run by hand
+after switching branches; sbx already knows them from creating the
+sandbox.
+Three modes:
 
-```bash
-sbx sync lane-a
-```
+- `sbx rebuild lane-a` runs install and migrate. Use it after switching
+  to a branch that adds a dependency or a new migration.
+- `sbx rebuild lane-a --data` does the same, then runs reset and seed
+  to wipe the database data and rewrite them.
+- `sbx rebuild lane-a --hard` does the same as `--data`, but first
+  destroys the sandbox's services and their volumes so the database is
+  rebuilt from empty. Use it when a branch removes a migration and the
+  schema has to go back with it, or when the state has drifted in a way
+  `--data` cannot fix.
 
-If the task needs a fresh database, `sbx seed lane-a --reset` deletes the
-current data and runs the seed hook again.
+Do not run `sbx rebuild` while an agent is working in the lane. It
+rewrites files the agent did not touch, and the agent will try to "fix"
+what it finds.
 
-Do not run `sbx sync` while an agent is working in the lane. It rewrites
-files the agent did not touch, and the agent will try to "fix" what it
-finds.
+The two sections that follow cover the cases where a lane and the host
+have to move commits between them, which is the one thing sbx does add
+on top of plain git.
 
 ### Fetch a branch from a lane into the host
 
