@@ -74,6 +74,11 @@ A few terms used across the docs and the commands.
   port a copy uses is shifted by its slot, so nothing collides.
 - **Manifest.** The `sandbox.config.json` file at your repository root.
   Every copy reads from it.
+- **Hook.** A shell command the manifest declares. sbx runs hooks at
+  fixed moments (creating a copy, rebuilding it). Each hook belongs to
+  a phase (see the rebuild section below).
+- **Service.** A stateful process the copy runs, typically a database
+  in a container. Declared in a Compose file the manifest points at.
 
 Two git remotes are set up automatically:
 
@@ -89,9 +94,9 @@ the host through these remotes.
 | Command | |
 |---|---|
 | `sbx create <name>` | New copy. Fetches `origin` and lands on its default branch |
-| `sbx rebuild <name>` | Bring an existing copy in line with the project: install and migrate |
-| `sbx rebuild <name> --data` | Also reset and re-seed the data |
-| `sbx rebuild <name> --hard` | Also destroy services and volumes first, then everything above |
+| `sbx rebuild <name>` | Run every `prepare` hook |
+| `sbx rebuild <name> --data` | Run every `prepare` hook, then every `populate` hook |
+| `sbx rebuild <name> --hard` | Destroy services and volumes, then run every `prepare` and `populate` hook |
 | `sbx open <name>` | Interactive subshell inside the copy: its directory as cwd, its env loaded |
 | `sbx code <name>` | Open the copy in `$SBX_EDITOR` (default `code`). No env is injected |
 | `sbx run <name> -- <cmd>` | Run a single command inside the copy, for scripts and one-shots |
@@ -143,29 +148,41 @@ git switch -c feat/x origin/main
 git push -u origin feat/x
 ```
 
-`sbx rebuild` runs the install, migrate, seed and reset hooks declared
-in your manifest. These are the same commands you would run by hand
-after switching branches; sbx already knows them from creating the
-sandbox.
+### Rebuild a lane
+
+`sbx rebuild` runs the hooks the manifest declares. Each hook belongs
+to one of two phases:
+
+- **`prepare`** brings the sandbox to the branch's declared state:
+  install dependencies, apply migrations, build generated artifacts.
+- **`populate`** wipes and rewrites the sandbox's runtime data: reset
+  seeded rows, warm caches.
+
+A common shape:
+
+```json
+"hooks": [
+  { "name": "install", "phase": "prepare",  "run": "pnpm install" },
+  { "name": "migrate", "phase": "prepare",  "run": "pnpm db:migrate" },
+  { "name": "reset",   "phase": "populate", "run": "node sandbox/reset.mjs" },
+  { "name": "seed",    "phase": "populate", "run": "node sandbox/seed.mjs" }
+]
+```
+
 Three modes:
 
-- `sbx rebuild lane-a` runs install and migrate. Use it after switching
-  to a branch that adds a dependency or a new migration.
-- `sbx rebuild lane-a --data` does the same, then runs reset and seed
-  to wipe the database data and rewrite them.
-- `sbx rebuild lane-a --hard` does the same as `--data`, but first
-  destroys the sandbox's services and their volumes so the database is
-  rebuilt from empty. Use it when a branch removes a migration and the
-  schema has to go back with it, or when the state has drifted in a way
-  `--data` cannot fix.
+- `sbx rebuild lane-a` runs every `prepare` hook. Use it after
+  switching to a branch that adds a dependency or a new migration.
+- `sbx rebuild lane-a --data` runs every `prepare` hook, then every
+  `populate` hook. Rewrites the sandbox's data.
+- `sbx rebuild lane-a --hard` destroys the sandbox's services and their
+  volumes, then runs every hook. Use it when a branch removes a
+  migration and the schema has to go back with it, or when the state
+  has drifted in a way `--data` cannot fix.
 
 Do not run `sbx rebuild` while an agent is working in the lane. It
 rewrites files the agent did not touch, and the agent will try to "fix"
 what it finds.
-
-The two sections that follow cover the cases where a lane and the host
-have to move commits between them, which is the one thing sbx does add
-on top of plain git.
 
 ### Fetch a branch from a lane into the host
 

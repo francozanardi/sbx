@@ -34,7 +34,7 @@ export class RebuildCommand {
 
   modeOf(argumentList) {
     if (argumentList.hasFlag('hard')) return 'hard';
-    if (argumentList.hasFlag('data')) return 'data';
-    return 'code';
+    if (argumentList.hasFlag('data')) return 'populate';
+    return 'prepare';
   }
 }

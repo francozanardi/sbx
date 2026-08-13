@@ -1,20 +1,26 @@
 /**
- * Brings a sandbox in line with what the project declares right now, at
- * one of three severities:
+ * Brings a sandbox in line with what the project declares right now.
  *
- *   'code': env files rendered, services started, install and migrate
- *           re-run. Safe and idempotent — this is the default `sbx
- *           rebuild` and also what `sbx create` uses to converge a fresh
- *           clone.
- *   'data': everything 'code' does, plus reset and seed at the end.
- *           Rewrites the seeded data through the project's reset hook.
- *   'hard': destroys the sandbox's services and their volumes, then does
- *           everything 'data' does with a slight difference — the reset
- *           hook is skipped because empty volumes already carry no data.
+ * The manifest lists hooks in two phases:
  *
- * Each mode is a strict superset of the previous one in cost. Install
- * and migrate are idempotent, so running them at the top of every mode
- * is close to free when there is nothing new to apply.
+ *   'prepare':  bring the sandbox to the branch's declared state.
+ *               Idempotent and forward-only, safe to re-run.
+ *               (e.g. install dependencies, apply migrations, build
+ *                generated artifacts)
+ *   'populate': reset and rewrite the sandbox's runtime data.
+ *               Destructive of anything a user may have accumulated.
+ *               (e.g. reset the database, seed known rows, warm a cache)
+ *
+ * Modes:
+ *
+ *   'prepare'  runs the prepare hooks. `sbx rebuild <name>`.
+ *   'populate' also runs the populate hooks. `sbx rebuild --data`.
+ *   'hard'     destroys the sandbox's services and their volumes first,
+ *              then runs everything as 'populate'. `sbx rebuild --hard`.
+ *
+ * Every mode also re-renders the env files and starts the services
+ * before any hook runs, because a hook that expects them to be up
+ * would otherwise fail on a first invocation.
  */
 export class SandboxRebuilder {
   constructor({ workspace, environmentFileWriter, hookRunner, terminal }) {
@@ -25,7 +31,7 @@ export class SandboxRebuilder {
   }
 
   /** @returns the variable map the sandbox was rendered and run with. */
-  rebuild(record, { runHooks, mode = 'code' }) {
+  rebuild(record, { runHooks, mode = 'prepare' }) {
     const variables = this.workspace.environmentFor(record);
     this.writeEnvironmentFiles(record, variables);
     if (mode === 'hard') this.destroyServices(record, variables);
@@ -35,14 +41,14 @@ export class SandboxRebuilder {
   }
 
   runHooks(mode, record, variables) {
-    this.runHook('install', record, variables);
-    this.runHook('migrate', record, variables);
-    if (mode === 'data') this.runHook('reset', record, variables);
-    if (mode === 'data' || mode === 'hard') this.runHook('seed', record, variables);
+    this.runPhase('prepare', record, variables);
+    if (mode === 'populate' || mode === 'hard') this.runPhase('populate', record, variables);
   }
 
-  runHook(name, record, variables) {
-    this.hookRunner.run(this.workspace.manifest, name, record.directory, variables);
+  runPhase(phase, record, variables) {
+    for (const hook of this.workspace.manifest.hooksForPhase(phase)) {
+      this.hookRunner.run(hook, record.directory, variables);
+    }
   }
 
   writeEnvironmentFiles(record, variables) {

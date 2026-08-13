@@ -191,8 +191,9 @@ export class SetupInspector {
   }
 
   checkHooks() {
-    const defined = ['install', 'migrate', 'seed', 'reset'].filter((hook) => this.workspace.manifest.hook(hook));
-    if (defined.length === 0) return { name: 'hooks', ok: null, detail: 'none declared' };
-    return { name: 'hooks', ok: true, detail: defined.join(', ') };
+    const hooks = this.workspace.manifest.hooks();
+    if (hooks.length === 0) return { name: 'hooks', ok: null, detail: 'none declared' };
+    const summary = hooks.map((hook) => `${hook.name} (${hook.phase})`).join(', ');
+    return { name: 'hooks', ok: true, detail: summary };
   }
 }

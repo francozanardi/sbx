@@ -6,21 +6,22 @@ import { SbxError } from '../domain/SbxError.mjs';
 /**
  * Brings a sandbox into existence: a clone of its own, a port block
  * nothing else is using, rendered env files, its stateful services, and
- * whatever the project's install, migrate and seed hooks do to it.
+ * every hook the manifest declares.
  *
- * What is unique to a first run lives here — allocating the slot, cloning
- * the repository, minting the secrets, seeding the data. Everything that a
- * later run could repeat is delegated, so the two paths cannot drift.
+ * What is unique to a first run lives here: allocating the slot, cloning
+ * the repository, minting the secrets. Everything else is delegated to
+ * the rebuilder so the same code that later re-converges a sandbox is
+ * the one that converges it the first time.
  *
  * The registry entry is written as soon as the clone exists, so a run
- * that fails halfway still leaves something the delete command can clean up.
+ * that fails halfway still leaves something the delete command can clean
+ * up.
  */
 export class SandboxCreator {
-  constructor({ workspace, clones, rebuilder, hookRunner, secretGenerator, portProbe, terminal }) {
+  constructor({ workspace, clones, rebuilder, secretGenerator, portProbe, terminal }) {
     this.workspace = workspace;
     this.clones = clones;
     this.rebuilder = rebuilder;
-    this.hookRunner = hookRunner;
     this.secretGenerator = secretGenerator;
     this.portProbe = portProbe;
     this.terminal = terminal;
@@ -34,8 +35,7 @@ export class SandboxCreator {
     await this.rejectBusyPorts(slot, name);
 
     const record = this.provisionClone(name, slot, { branch, startPoint });
-    const variables = this.rebuilder.rebuild(record, { runHooks, mode: 'code' });
-    if (runHooks) this.seed(record, variables);
+    this.rebuilder.rebuild(record, { runHooks, mode: 'populate' });
 
     return record;
   }
@@ -112,9 +112,5 @@ export class SandboxCreator {
       minted[variableName] = this.secretGenerator.generate(byteLength);
     }
     return minted;
-  }
-
-  seed(record, variables) {
-    this.hookRunner.run(this.workspace.manifest, 'seed', record.directory, variables);
   }
 }

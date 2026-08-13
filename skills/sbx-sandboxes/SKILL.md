@@ -36,13 +36,21 @@ Run them from anywhere inside the project. The manifest is found by
 walking up from the working directory.
 
 ```bash
-sbx create <name>          # clone, ports, services, install/migrate/seed
-sbx rebuild <name>         # re-render env, start services, re-run install/migrate
-sbx rebuild <name> --data  # also re-run reset + seed
-sbx rebuild <name> --hard  # also destroy services + volumes first
-sbx open <name>            # subshell in the sandbox's directory with its env loaded
-sbx code <name>            # open the sandbox in $SBX_EDITOR (default: code)
-sbx run <name> -- <cmd>    # single command with the sandbox's env, for scripts
+sbx create <name>          # allocate slot, clone, register host remote,
+                           # render env, start services,
+                           # run every prepare hook, run every populate hook
+sbx rebuild <name>         # render env, start services,
+                           # run every prepare hook
+sbx rebuild <name> --data  # render env, start services,
+                           # run every prepare hook, run every populate hook
+sbx rebuild <name> --hard  # render env, destroy services and volumes, start services,
+                           # run every prepare hook, run every populate hook
+sbx run <name> -- <cmd>    # run <cmd> in the sandbox's directory with its env;
+                           # stdout, stderr and exit code all forward
+sbx open <name>            # interactive $SHELL in the sandbox
+                           # (for humans at a terminal; not for agents)
+sbx code <name>            # launch $SBX_EDITOR (default: code) at the sandbox
+                           # (for humans; no env is injected into the editor)
 sbx list                   # every sandbox, its slot, its service state
 sbx info <name>            # one sandbox and the port each role got
 sbx up <name>              # start its services
@@ -56,14 +64,31 @@ remote's default branch, and `--branch=<name>` to create a local branch
 at that point. Both are for per-task sandboxes and are not needed for
 lanes. `create` and `rebuild` both accept `--no-hooks`.
 
+The manifest declares hooks as an ordered array of `{ name, phase,
+run }` objects. `name` is user-defined and only appears in logs and
+error messages; do not assume a hook exists just because a familiar
+name (`install`, `migrate`, `seed`, `reset`) would fit. Read the
+project's `sandbox.config.json` when it matters. Hooks fall into two
+phases:
+
+- **`prepare`**: the sandbox's dependencies, forward migrations and
+  generated artifacts. Every hook here is idempotent and does not
+  destroy accumulated state.
+- **`populate`**: the sandbox's runtime data. Every hook here is
+  destructive of what a user or a previous run may have accumulated.
+
 `rebuild` has three modes, each a strict superset of the previous:
 
-- Default: install and migrate. Non-destructive, and the mode to reach
-  for after a merge that adds a dependency or a forward migration.
-- `--data`: also reset and seed. Rewrites the seeded data.
-- `--hard`: also destroys the services and their volumes first. Use it
-  when a branch removes a migration and the schema has to be rebuilt,
-  or when the state has drifted in a way `--data` cannot fix.
+- Default (`sbx rebuild <name>`): runs every `prepare` hook in
+  declaration order. Nothing else changes. Use after a `git switch`
+  or a merge that adds a dependency or a forward migration.
+- `--data` (`sbx rebuild <name> --data`): runs every `prepare` hook,
+  then every `populate` hook. Rewrites the sandbox's data.
+- `--hard` (`sbx rebuild <name> --hard`): destroys the sandbox's
+  Compose services and their volumes first, then runs every
+  `prepare` hook, then every `populate` hook. Use when a branch
+  removes a migration so the schema has to be rebuilt, or when
+  file-based state cannot be fixed by the reset hook alone.
 
 `delete` refuses to run while the sandbox holds commits no remote has, or
 files that are not committed, and prints how to recover them. Push the

@@ -40,7 +40,7 @@ export class ManifestScaffolder {
     return {
       name: projectName,
       ports: { base: { app: 3000 }, stride: 10, maxSlots: 9 },
-      hooks: detected.install ? { install: detected.install } : {},
+      hooks: detected.install ? [{ name: 'install', phase: 'prepare', run: detected.install }] : [],
     };
   }
 }

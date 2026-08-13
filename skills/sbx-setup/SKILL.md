@@ -107,19 +107,67 @@ discoverable.
 
 ## 6. Declare the hooks, verify, commit
 
+Hooks are the shell commands sbx runs to bring a sandbox from a fresh
+clone (or from an existing state) to a runnable, populated project. The
+value is an **ordered array** of objects; each object has three
+required fields:
+
+- `name`: a unique string. Only used for logs and error messages, so
+  a failure prints `` The `<name>` hook failed: … ``. Not a keyword.
+- `phase`: either `"prepare"` or `"populate"`. Nothing else validates.
+- `run`: the shell command line, executed with `sh -c`.
+
 ```json
-"hooks": {
-  "install": "pnpm install",
-  "migrate": "pnpm db:migrate",
-  "seed": "node sandbox/seed.mjs",
-  "reset": "node sandbox/reset.mjs"
-}
+"hooks": [
+  { "name": "install",       "phase": "prepare",  "run": "pnpm install" },
+  { "name": "migrate",       "phase": "prepare",  "run": "pnpm db:migrate" },
+  { "name": "build-workers", "phase": "prepare",  "run": "pnpm --filter workers build" },
+  { "name": "reset",         "phase": "populate", "run": "node sandbox/reset.mjs" },
+  { "name": "seed",          "phase": "populate", "run": "node sandbox/seed.mjs" }
+]
 ```
 
-Shell command lines, run from the sandbox root with the variables in
-the environment. `create` runs install → migrate → seed. `sbx rebuild
-<name>` re-runs install and migrate; `--data` adds reset → seed; `--hard`
-also destroys the services and their volumes first.
+**Phases and their contract.**
+
+- **`prepare`** brings the sandbox to the branch's declared state:
+  install dependencies, apply forward migrations, build generated
+  artifacts. Every hook here must be idempotent, safe to re-run when
+  nothing has changed. It must not destroy data a user may have
+  accumulated in the sandbox.
+- **`populate`** rewrites the sandbox's runtime data: reset seeded
+  rows, insert known data, warm caches, register mocks. Every hook
+  here is expected to be destructive of accumulated state. It runs
+  after everything in `prepare` has finished.
+
+**When each phase runs.**
+
+- `sbx create <name>` runs `prepare`, then `populate`.
+- `sbx rebuild <name>` runs `prepare` only.
+- `sbx rebuild <name> --data` runs `prepare`, then `populate`.
+- `sbx rebuild <name> --hard` destroys the sandbox's services and
+  their volumes first, then runs `prepare`, then `populate`.
+- `--no-hooks` on `create` or `rebuild` skips every hook regardless of
+  phase.
+
+**What matters about ordering.** The array position is the run order
+inside a phase. In the example above, `install` runs before `migrate`
+which runs before `build-workers`; in the populate phase, `reset` runs
+before `seed`. sbx does not reorder or parallelize.
+
+**What is optional.** Every field of a hook object is required, but
+the `hooks` array itself is optional and can be empty. A project with
+no dependencies to install, no database to migrate, and no data to
+seed can declare `"hooks": []` (or omit the field). A project with
+nothing to reset or seed can declare `prepare` hooks only; `sbx
+rebuild --data` and `--hard` on such a project still run cleanly,
+they just have no `populate` work to do.
+
+**What a hook failure means.** A hook that exits non-zero is fatal to
+the invoking command (`create` or `rebuild`). The sandbox is left in
+whatever state the failing hook produced. For `create`, that means a
+half-provisioned sandbox that must be deleted with `sbx delete <name>
+--force` before retrying. sbx prints a warning to that effect when it
+happens.
 
 ```bash
 sbx doctor
@@ -130,10 +178,10 @@ sbx create sb-1
 ## Seeds
 
 Seed two or three accounts covering distinct states: one at a limit, one
-paid, one with no ceiling. Gated paths can then be exercised by signing in
-as someone else instead of editing the database by hand. Make the seed
-idempotent: delete those accounts and rewrite them, so `--reset` always
-lands on the same known state.
+paid, one with no ceiling. Gated paths can then be exercised by signing
+in as someone else instead of editing the database by hand. Make the
+seed idempotent: delete those accounts and rewrite them, so `sbx rebuild
+--data` always lands on the same known state.
 
 When the write path is non-trivial, such as password hashing, import the
 application's own function rather than reimplementing it. Reimplementing

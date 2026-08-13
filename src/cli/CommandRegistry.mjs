@@ -66,7 +66,6 @@ export class CommandRegistry {
       workspace,
       clones,
       rebuilder,
-      hookRunner,
       secretGenerator,
       portProbe,
       terminal: this.terminal,

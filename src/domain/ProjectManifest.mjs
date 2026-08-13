@@ -2,6 +2,7 @@ import { SbxError } from './SbxError.mjs';
 
 const DEFAULT_STRIDE = 10;
 const DEFAULT_MAX_SLOTS = 9;
+const HOOK_PHASES = new Set(['prepare', 'populate']);
 
 /**
  * Validated view over a project's `sandbox.config.json`. Every accessor
@@ -27,6 +28,44 @@ export class ProjectManifest {
       throw new SbxError('sandbox.config.json: `ports` is missing.', 'Declare at least `ports.base`, mapping one role to the port it uses today.');
     }
     this.validatePortRoles(ports);
+    this.validateHooks();
+  }
+
+  /**
+   * Hooks are an ordered list of `{ name, phase, run }` objects. The
+   * position in the list is the order they run in. Phase decides which
+   * `sbx rebuild` mode picks them up.
+   */
+  validateHooks() {
+    const hooks = this.raw.hooks;
+    if (hooks === undefined) return;
+    if (!Array.isArray(hooks)) {
+      throw new SbxError(
+        'sandbox.config.json: `hooks` must be an array.',
+        'Each entry is `{ "name": "...", "phase": "prepare" | "populate", "run": "..." }`.',
+      );
+    }
+    const seen = new Set();
+    for (let index = 0; index < hooks.length; index += 1) {
+      const hook = hooks[index];
+      const where = `sandbox.config.json: \`hooks[${index}]\``;
+      if (!hook || typeof hook !== 'object') {
+        throw new SbxError(`${where} is not an object.`, 'Each entry is `{ "name": "...", "phase": "prepare" | "populate", "run": "..." }`.');
+      }
+      if (typeof hook.name !== 'string' || hook.name.length === 0) {
+        throw new SbxError(`${where}.name is missing.`, 'A non-empty string used in logs and error messages.');
+      }
+      if (seen.has(hook.name)) {
+        throw new SbxError(`${where}.name "${hook.name}" is already used.`, 'Every hook name must be unique.');
+      }
+      seen.add(hook.name);
+      if (!HOOK_PHASES.has(hook.phase)) {
+        throw new SbxError(`${where}.phase must be "prepare" or "populate".`, '`prepare` runs on every `sbx rebuild`; `populate` also runs with --data and --hard.');
+      }
+      if (typeof hook.run !== 'string' || hook.run.length === 0) {
+        throw new SbxError(`${where}.run is missing.`, 'A non-empty shell command line.');
+      }
+    }
   }
 
   validatePortRoles(ports) {
@@ -110,8 +149,13 @@ export class ProjectManifest {
     return this.raw.secrets ?? null;
   }
 
-  /** Shell command registered under the given lifecycle hook, or null when unset. */
-  hook(hookName) {
-    return this.raw.hooks?.[hookName] ?? null;
+  /** Every declared hook, in order, as `{ name, phase, run }`. */
+  hooks() {
+    return this.raw.hooks ?? [];
+  }
+
+  /** Hooks in the given phase, in declaration order. */
+  hooksForPhase(phase) {
+    return this.hooks().filter((hook) => hook.phase === phase);
   }
 }
