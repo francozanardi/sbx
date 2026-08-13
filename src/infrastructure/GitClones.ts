@@ -238,6 +238,15 @@ export class GitClones {
     }
   }
 
+  /**
+   * Branches holding commits no remote and no other clone has.
+   *
+   * Nothing here is caught: a git command that fails leaves the question
+   * unanswered, and the caller has to treat that as "cannot tell" rather
+   * than as "nothing to lose". Deciding it is safe to delete a sandbox is
+   * the one place in this tool where guessing costs work that exists
+   * nowhere else.
+   */
   unsavedBranches(directory: string): UnsavedBranch[] {
     return this.localBranches(directory)
       .map((branch) => ({ branch, commits: this.commitsOffRemotes(directory, branch) }))
@@ -246,29 +255,25 @@ export class GitClones {
   }
 
   private localBranches(directory: string): string[] {
-    try {
-      const listed = this.processRunner.captureProgram(
-        'git',
-        ['for-each-ref', '--format=%(refname:short)', 'refs/heads'],
-        { cwd: directory },
-      );
-      return listed.length > 0 ? listed.split('\n') : [];
-    } catch {
-      return [];
-    }
+    const listed = this.processRunner.captureProgram(
+      'git',
+      ['for-each-ref', '--format=%(refname:short)', 'refs/heads'],
+      { cwd: directory },
+    );
+    return listed.length > 0 ? listed.split('\n') : [];
   }
 
   private commitsOffRemotes(directory: string, branch: string): number {
-    try {
-      const counted = this.processRunner.captureProgram(
-        'git',
-        ['rev-list', '--count', branch, '--not', '--remotes'],
-        { cwd: directory },
-      );
-      return Number(counted);
-    } catch {
-      return 0;
+    const counted = this.processRunner.captureProgram(
+      'git',
+      ['rev-list', '--count', branch, '--not', '--remotes'],
+      { cwd: directory },
+    );
+    const commits = Number(counted);
+    if (!Number.isInteger(commits)) {
+      throw new SbxError(`\`git rev-list --count ${branch}\` answered "${counted}", which is not a count.`);
     }
+    return commits;
   }
 
   private resolveIn(directory: string, revision: string): string | null {
@@ -295,11 +300,7 @@ export class GitClones {
 
   /** Paths the clone has modified, staged or left untracked. */
   uncommittedPaths(directory: string): string[] {
-    try {
-      const listed = this.processRunner.captureProgram('git', ['status', '--porcelain'], { cwd: directory });
-      return listed.length > 0 ? listed.split('\n') : [];
-    } catch {
-      return [];
-    }
+    const listed = this.processRunner.captureProgram('git', ['status', '--porcelain'], { cwd: directory });
+    return listed.length > 0 ? listed.split('\n') : [];
   }
 }

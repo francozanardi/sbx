@@ -43,6 +43,36 @@ describe('sbx init', () => {
     expect(manifest.hooks.some((h) => h.run === 'npm install')).toBe(true);
   });
 
+  it.each([
+    // Yarn 1 rejects `--immutable` outright, so the two are told apart by
+    // the file only Berry has.
+    [{ 'yarn.lock': '' }, 'yarn install --frozen-lockfile'],
+    [{ 'yarn.lock': '', '.yarnrc.yml': 'nodeLinker: node-modules\n' }, 'yarn install --immutable'],
+    [{ 'bun.lock': '' }, 'bun install'],
+  ])('picks the install command the toolchain actually accepts (%s)', (files, expected) => {
+    fs.writeFileSync(path.join(projectDir, 'package.json'), '{"name":"demo"}\n');
+    for (const [name, contents] of Object.entries(files)) {
+      fs.writeFileSync(path.join(projectDir, name), contents);
+    }
+
+    const result = spawnSync('node', [BIN, 'init'], {
+      cwd: projectDir,
+      env: { HOME: projectDir, PATH: process.env.PATH ?? '', NO_COLOR: '1' },
+      encoding: 'utf8',
+    });
+
+    expect(result.status).toBe(0);
+    const manifest = JSON.parse(fs.readFileSync(path.join(projectDir, 'sandbox.config.json'), 'utf8')) as {
+      ports: Record<string, unknown>;
+      hooks: { run: string }[];
+    };
+    expect(manifest.hooks.map((hook) => hook.run)).toContain(expected);
+    // Defaults are left out rather than written: a value spelled out
+    // reads as one that was chosen.
+    expect(manifest.ports).not.toHaveProperty('stride');
+    expect(manifest.ports).not.toHaveProperty('maxSlots');
+  });
+
   it('refuses to overwrite an existing manifest', () => {
     fs.writeFileSync(path.join(projectDir, 'sandbox.config.json'), '{}\n');
     const result = spawnSync('node', [BIN, 'init'], {

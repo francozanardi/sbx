@@ -123,6 +123,7 @@ export class SandboxCreator {
       slot,
       directory,
       createdAt: new Date().toISOString(),
+      ports: this.workspace.portBlockFor(slot).resolve(),
       generatedSecrets: this.mintSecrets(),
     });
     this.workspace.registry.save(record);

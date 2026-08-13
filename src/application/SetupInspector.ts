@@ -65,6 +65,7 @@ export class SetupInspector {
       ['checkout', () => this.checkNotInsideSandbox()],
       ['git repository', () => this.checkRepository()],
       ['ports', () => this.checkPorts()],
+      ['port drift', () => this.checkPortDrift()],
       ['secrets', () => this.checkSecrets()],
       ['secrets syntax', () => this.checkSecretsSyntax()],
       ['templates', () => this.checkTemplates(variables)],
@@ -160,6 +161,26 @@ export class SetupInspector {
       return { name: 'ports', ok: false, detail: `slot ${String(slot)} wants ${ports.join(', ')} — ${taken.join(', ')} in use` };
     }
     return { name: 'ports', ok: true, detail: `slot ${String(slot)} free: ${ports.join(', ')}` };
+  }
+
+  /**
+   * Editing `ports.base` or `ports.stride` renumbers every sandbox that
+   * already exists, because a port block is derived on every read. The
+   * next rebuild of each one will move it; saying so before that happens
+   * is the whole job of this command.
+   */
+  private checkPortDrift(): CheckResult | null {
+    const drifted = this.workspace.registry
+      .list()
+      .map((record) => ({ record, moved: this.workspace.portBlockFor(record.slot).movedFrom(record.ports) }))
+      .filter((entry) => entry.moved.length > 0);
+    if (drifted.length === 0) return null;
+    const summary = drifted.map((entry) => `${entry.record.name} (${entry.moved.join(', ')})`).join('; ');
+    return {
+      name: 'port drift',
+      ok: false,
+      detail: `the manifest no longer yields the ports these sandboxes were built on: ${summary} — their next rebuild moves them`,
+    };
   }
 
   private checkSecrets(): CheckResult {

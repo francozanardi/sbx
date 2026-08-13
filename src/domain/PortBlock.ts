@@ -37,6 +37,21 @@ export class PortBlock {
     return Object.values(this.resolve()).sort((left, right) => left - right);
   }
 
+  /**
+   * Roles whose port has moved since the given map was recorded, phrased
+   * as `role was → is`.
+   *
+   * A block is derived from the manifest on every read, so editing
+   * `ports.base` or `ports.stride` silently renumbers every sandbox that
+   * already exists. Comparing against what a sandbox was built with is the
+   * only way to notice.
+   */
+  movedFrom(recorded: PortMap): string[] {
+    return Object.entries(this.resolve())
+      .filter(([role, port]) => role in recorded && recorded[role] !== port)
+      .map(([role, port]) => `${role} ${String(recorded[role])} → ${port}`);
+  }
+
   /** Ports this block shares with another one. Empty when the two can run side by side. */
   overlapWith(other: PortBlock): number[] {
     const taken = new Set(other.ports());

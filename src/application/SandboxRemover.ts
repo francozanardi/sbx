@@ -46,13 +46,32 @@ export class SandboxRemover {
 
   private rejectUnsavedWork(record: SandboxRecord): void {
     if (!fs.existsSync(record.directory)) return;
-    const branches = this.clones.unsavedBranches(record.directory);
-    const changes = this.clones.uncommittedPaths(record.directory);
+    const { branches, changes } = this.surveyWork(record);
     if (branches.length === 0 && changes.length === 0) return;
     throw new SbxError(
       `"${record.name}" holds work that exists nowhere else: ${this.describe(branches, changes)}.`,
       `Push it, or pull it into the project with \`git -C ${this.workspace.manifest.rootDirectory} fetch sbx-${record.name} <branch>\`. Pass --force to delete it anyway.`,
     );
+  }
+
+  /**
+   * A survey that could not be completed is not a survey that found
+   * nothing. Git failing here used to read as "nothing to lose", and the
+   * sandbox went with it.
+   */
+  private surveyWork(record: SandboxRecord): { branches: UnsavedBranch[]; changes: string[] } {
+    try {
+      return {
+        branches: this.clones.unsavedBranches(record.directory),
+        changes: this.clones.uncommittedPaths(record.directory),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new SbxError(
+        `Could not check "${record.name}" for work that exists nowhere else: ${message}`,
+        'Its commits and edits are only in this clone, so sbx will not delete it on a guess. Repair the repository, or pass --force to delete it without the check.',
+      );
+    }
   }
 
   private describe(branches: readonly UnsavedBranch[], changes: readonly string[]): string {

@@ -56,12 +56,30 @@ export class SandboxRebuilder {
 
   /** @returns the variable map the sandbox was rendered and run with. */
   rebuild(record: SandboxRecord, { runHooks, mode = 'prepare' }: RebuildOptions): EnvMap {
+    this.reportMovedPorts(record);
     const variables = this.workspace.environmentFor(record);
     this.writeEnvironmentFiles(record, variables);
     if (mode === 'hard') this.destroyServices(record, variables);
     this.startServices(record, variables);
     if (runHooks) this.runHooks(mode, record, variables);
     return variables;
+  }
+
+  /**
+   * A rebuild is where a manifest edit reaches an existing sandbox, so it
+   * is where the sandbox silently changes ports. Rendering the new numbers
+   * is the right thing to do; doing it without saying so is not, because
+   * the services are already up on the old ones and anything registered
+   * off this machine still points at them.
+   */
+  private reportMovedPorts(record: SandboxRecord): void {
+    const current = this.workspace.portBlockFor(record.slot);
+    const moved = current.movedFrom(record.ports);
+    if (moved.length === 0) return;
+    this.terminal.warn(
+      `${record.name} changes ports: ${moved.join(', ')}. Its services are running on the old ones — \`sbx down ${record.name}\` then \`sbx up ${record.name}\` moves them, and anything registered outside this machine, such as an OAuth redirect URI, has to be updated by hand.`,
+    );
+    this.workspace.registry.save(record.withPorts(current.resolve()));
   }
 
   private runHooks(mode: RebuildMode, record: SandboxRecord, variables: EnvMap): void {

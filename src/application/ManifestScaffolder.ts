@@ -18,7 +18,7 @@ export interface ScaffoldResult extends Detection {
 
 interface ScaffoldedManifest {
   name: string;
-  ports: { base: Record<string, number>; stride: number; maxSlots: number };
+  ports: { base: Record<string, number> };
   hooks: { name: string; phase: 'prepare' | 'populate'; run: string }[];
 }
 
@@ -61,7 +61,9 @@ export class ManifestScaffolder {
   private compose(projectName: string, detected: Detection | EcosystemEntry): ScaffoldedManifest {
     return {
       name: projectName,
-      ports: { base: { app: 3000 }, stride: 10, maxSlots: 9 },
+      // `stride` and `maxSlots` are left out rather than written at their
+      // defaults: a value spelled out reads as one that was chosen.
+      ports: { base: { app: 3000 } },
       hooks: detected.install ? [{ name: 'install', phase: 'prepare', run: detected.install }] : [],
     };
   }

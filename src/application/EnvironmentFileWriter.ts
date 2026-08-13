@@ -41,6 +41,11 @@ export class EnvironmentFileWriter {
     const destinationPath = path.resolve(sandboxDirectory, file.to);
     fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
     fs.writeFileSync(destinationPath, this.renderTemplate(templatePath, variables), { mode: 0o600 });
+    // `mode` only applies when writeFileSync creates the file, and these
+    // are rewritten on every rebuild. A rendered file holds the project's
+    // credentials, so the permissions are reasserted rather than inherited
+    // from whatever created it first.
+    fs.chmodSync(destinationPath, 0o600);
   }
 
   private renderTemplate(templatePath: string, variables: EnvMap): string {

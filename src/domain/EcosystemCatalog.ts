@@ -7,7 +7,8 @@ export interface EcosystemEntry {
 /**
  * Maps the file that identifies a toolchain to the command that installs
  * its dependencies. Lockfiles come before the manifests they lock, so a
- * project with both is read as the more specific one.
+ * project with both is read as the more specific one, and a file that
+ * pins a major version comes before the lockfile it accompanies.
  *
  * This is the only detection the tool does. Ports, services and seeds are
  * never guessed — a wrong guess there costs more than a blank field.
@@ -16,8 +17,13 @@ export class EcosystemCatalog {
   entries(): readonly EcosystemEntry[] {
     return [
       { marker: 'pnpm-lock.yaml', ecosystem: 'node + pnpm', install: 'pnpm install' },
+      // Bun writes the text lockfile from 1.2 on and the binary one before it.
+      { marker: 'bun.lock', ecosystem: 'node + bun', install: 'bun install' },
       { marker: 'bun.lockb', ecosystem: 'node + bun', install: 'bun install' },
-      { marker: 'yarn.lock', ecosystem: 'node + yarn', install: 'yarn install --immutable' },
+      // `--immutable` is Berry's spelling and Yarn 1 rejects it outright, so
+      // the two are told apart by the file only Berry has.
+      { marker: '.yarnrc.yml', ecosystem: 'node + yarn (berry)', install: 'yarn install --immutable' },
+      { marker: 'yarn.lock', ecosystem: 'node + yarn (classic)', install: 'yarn install --frozen-lockfile' },
       { marker: 'package-lock.json', ecosystem: 'node + npm', install: 'npm ci' },
       { marker: 'package.json', ecosystem: 'node', install: 'npm install' },
       { marker: 'uv.lock', ecosystem: 'python + uv', install: 'uv sync' },
