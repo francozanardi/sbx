@@ -40,6 +40,13 @@ describe('ProjectManifest — validation errors', () => {
   it.each([
     [null, 'null root'],
     [undefined, 'undefined root'],
+    ['a string', 'string root'],
+    [[], 'array root'],
+  ])('rejects a manifest that is not an object (%s)', (raw, _label) => {
+    expect(() => build(raw)).toThrow(/does not hold a JSON object/);
+  });
+
+  it.each([
     [{}, 'empty'],
     [{ name: '' }, 'empty name'],
     [{ name: 123 }, 'non-string name'],
@@ -134,6 +141,134 @@ describe('ProjectManifest — port variable names', () => {
       ports: { base: { api: 1, db: 2 }, env: { api: 'PORT_MAIN' } },
     });
     expect(manifest.portVariableNames()).toEqual({ api: 'PORT_MAIN', db: 'DB_PORT' });
+  });
+});
+
+describe('ProjectManifest — stride and slots', () => {
+  it.each([['ten'], [0], [1.5], [true]])('rejects a stride that is not a positive integer (%s)', (bad) => {
+    expect(() => build({ name: 'demo', ports: { base: { app: 3000 }, stride: bad } })).toThrow(/ports.stride/);
+  });
+
+  it.each([['lots'], [0], [2.5]])('rejects maxSlots that is not a positive integer (%s)', (bad) => {
+    expect(() => build({ name: 'demo', ports: { base: { app: 3000 }, maxSlots: bad } })).toThrow(/ports.maxSlots/);
+  });
+});
+
+describe('ProjectManifest — colliding port blocks', () => {
+  it('rejects two roles sharing one base port', () => {
+    expect(() => build({ name: 'demo', ports: { base: { api: 3000, web: 3000 } } })).toThrow(/are both 3000/);
+  });
+
+  it('rejects base ports an exact stride apart, which collides with slot 0', () => {
+    // slot 1's `api` (4950) is the port this checkout binds for `db`.
+    expect(() => build({ name: 'demo', ports: { base: { api: 4940, db: 4950 } } })).toThrow(
+      /exact multiple of `ports.stride`/,
+    );
+  });
+
+  it('rejects base ports a whole number of strides apart', () => {
+    expect(() => build({ name: 'demo', ports: { base: { api: 3000, db: 3020 } } })).toThrow(
+      /exact multiple of `ports.stride`/,
+    );
+  });
+
+  it('accepts a distance no slot can reach', () => {
+    // 1000 is a multiple of 10, but slot 100 does not exist with maxSlots 9.
+    expect(() => build({ name: 'demo', ports: { base: { api: 4700, db: 5700 } } })).not.toThrow();
+  });
+
+  it('accepts base ports that no stride multiple lands on', () => {
+    expect(() => build({ name: 'demo', ports: { base: { api: 3000, db: 5432 } } })).not.toThrow();
+  });
+});
+
+describe('ProjectManifest — port variable names', () => {
+  it('rejects an entry in ports.env for a role with no base port', () => {
+    expect(() => build({ name: 'demo', ports: { base: { api: 1 }, env: { web: 'WEB_PORT' } } })).toThrow(
+      /ports.env.web/,
+    );
+  });
+
+  it('rejects two roles published under one variable name', () => {
+    const raw = { name: 'demo', ports: { base: { api: 1, web: 2 }, env: { api: 'PORT', web: 'PORT' } } };
+    expect(() => build(raw)).toThrow(/declared by both/);
+  });
+
+  it('rejects a role whose default variable name would be unusable', () => {
+    expect(() => build({ name: 'demo', ports: { base: { 'db-main': 1 } } })).toThrow(/not a usable variable name/);
+  });
+
+  it('rejects a reserved SBX_ variable name', () => {
+    expect(() => build({ name: 'demo', ports: { base: { api: 1 }, env: { api: 'SBX_NAME' } } })).toThrow(/reserved/);
+  });
+});
+
+describe('ProjectManifest — generate', () => {
+  const withGenerate = (generate: unknown) => ({ ...validRaw, generate });
+
+  it('rejects a non-object', () => {
+    expect(() => build(withGenerate([1, 2]))).toThrow(/generate/);
+  });
+
+  it.each([[8], ['32'], [32.5]])('rejects a byte length that is not a usable integer (%s)', (bad) => {
+    expect(() => build(withGenerate({ SESSION: bad }))).toThrow(/generate.SESSION/);
+  });
+
+  it('rejects an unusable variable name', () => {
+    expect(() => build(withGenerate({ 'session-secret': 32 }))).toThrow(/not a usable variable name/);
+  });
+});
+
+describe('ProjectManifest — variables', () => {
+  it('rejects non-string values', () => {
+    expect(() => build({ ...validRaw, variables: { LOG_LEVEL: 5 } })).toThrow(/variables.LOG_LEVEL/);
+  });
+
+  it('rejects a name also minted by generate', () => {
+    const raw = { ...validRaw, generate: { TOKEN: 32 }, variables: { TOKEN: 'x' } };
+    expect(() => build(raw)).toThrow(/declared by both/);
+  });
+});
+
+describe('ProjectManifest — env files', () => {
+  const withEnv = (env: unknown) => ({ ...validRaw, env });
+
+  it('rejects a non-array', () => {
+    expect(() => build(withEnv('templates/app.env'))).toThrow(/`env` must be an array/);
+  });
+
+  it('rejects an entry missing `to`', () => {
+    expect(() => build(withEnv([{ from: 'a.env' }]))).toThrow(/env\[0\].to/);
+  });
+
+  it('rejects an entry missing `from`', () => {
+    expect(() => build(withEnv([{ to: '.env' }]))).toThrow(/env\[0\].from/);
+  });
+
+  it('rejects a destination that climbs out of the sandbox', () => {
+    expect(() => build(withEnv([{ from: 'a.env', to: '../../escaped.env' }]))).toThrow(/climbs out/);
+  });
+
+  it('rejects an absolute destination', () => {
+    expect(() => build(withEnv([{ from: 'a.env', to: '/etc/app.env' }]))).toThrow(/absolute path/);
+  });
+
+  it('rejects two templates rendering into one file', () => {
+    const env = [
+      { from: 'a.env', to: '.env' },
+      { from: 'b.env', to: '.env' },
+    ];
+    expect(() => build(withEnv(env))).toThrow(/already renders into/);
+  });
+});
+
+describe('ProjectManifest — compose', () => {
+  it('rejects a compose path that climbs out of the repository', () => {
+    expect(() => build({ ...validRaw, compose: '../compose.yml' })).toThrow(/climbs out/);
+  });
+
+  it('rejects a non-string compose', () => {
+    expect(() => build({ ...validRaw, compose: true })).toThrow(/compose/);
   });
 });
 
