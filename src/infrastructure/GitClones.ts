@@ -201,6 +201,34 @@ export class GitClones {
     }
   }
 
+  /**
+   * True when the last commit carries this repository-relative path, which
+   * is what decides whether a sandbox's own clone will have it. Being
+   * present in the working tree is not enough, and neither is being staged.
+   */
+  committed(relativePath: string): boolean {
+    try {
+      this.processRunner.captureProgram('git', ['cat-file', '-e', `HEAD:${relativePath}`], {
+        cwd: this.repositoryDirectory,
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** True when the repository's ignore rules cover this path, tracked or not. */
+  ignores(relativePath: string): boolean {
+    try {
+      this.processRunner.captureProgram('git', ['check-ignore', '--quiet', '--no-index', '--', relativePath], {
+        cwd: this.repositoryDirectory,
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /** The branch checked out right now, or null when the clone is detached or gone. */
   currentBranch(directory: string = this.repositoryDirectory): string | null {
     try {

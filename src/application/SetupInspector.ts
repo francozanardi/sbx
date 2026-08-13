@@ -19,6 +19,8 @@ export interface CheckResult {
   detail: string;
 }
 
+type Produced = CheckResult | CheckResult[] | null;
+
 export interface SetupInspectorDeps {
   workspace: ProjectWorkspace;
   clones: GitClones;
@@ -32,8 +34,13 @@ export interface SetupInspectorDeps {
  * Answers "would `sbx create` work here?" without creating anything.
  *
  * Every check reads the project's own checkout, not a sandbox, so it
- * reports on the files as they are right now — including ones not committed
- * yet, which a sandbox would not see.
+ * reports on the files as they are right now. Where that differs from what
+ * a sandbox would see — a template that exists but was never committed —
+ * the difference is itself one of the things worth reporting.
+ *
+ * No check may end the run. The whole point of the command is to list
+ * everything that is wrong in one pass, so a check that throws becomes a
+ * failed check and the rest still run.
  */
 export class SetupInspector {
   private readonly workspace: ProjectWorkspace;
@@ -54,34 +61,62 @@ export class SetupInspector {
 
   async inspect(): Promise<CheckResult[]> {
     const variables = this.previewVariables();
-    const results: (CheckResult | null)[] = [
-      this.checkRepository(),
-      await this.checkPorts(),
-      this.checkSecrets(),
-      this.checkSecretsSyntax(),
-      ...this.checkTemplates(variables),
-      this.checkCompose(variables),
-      this.checkDocker(),
-      this.checkSandboxLocation(),
-      this.checkHooks(),
+    const checks: [string, () => Promise<Produced> | Produced][] = [
+      ['git repository', () => this.checkRepository()],
+      ['ports', () => this.checkPorts()],
+      ['secrets', () => this.checkSecrets()],
+      ['secrets syntax', () => this.checkSecretsSyntax()],
+      ['templates', () => this.checkTemplates(variables)],
+      ['rendered files', () => this.checkDestinations()],
+      ['services', () => this.checkCompose(variables)],
+      ['docker', () => this.checkDocker()],
+      ['sandbox location', () => this.checkSandboxLocation()],
+      ['hooks', () => this.checkHooks()],
     ];
-    return results.filter((result): result is CheckResult => result !== null);
+    const results: CheckResult[] = [];
+    for (const [name, produce] of checks) results.push(...(await this.attempt(name, produce)));
+    return results;
   }
 
-  private previewVariables(): EnvMap {
-    const slot = this.nextSlot();
-    const generatedSecrets: Record<string, string> = {};
-    for (const [name, byteLength] of Object.entries(this.workspace.manifest.generatedSecrets())) {
-      generatedSecrets[name] = this.secretGenerator.generate(byteLength);
+  private async attempt(name: string, produce: () => Promise<Produced> | Produced): Promise<CheckResult[]> {
+    try {
+      const produced = await produce();
+      if (produced === null) return [];
+      return Array.isArray(produced) ? produced : [produced];
+    } catch (error) {
+      return [{ name, ok: false, detail: this.explain(error) }];
     }
-    const record = new SandboxRecord({
-      name: 'preview',
-      slot,
-      directory: this.workspace.sandboxPathFor('preview'),
-      createdAt: new Date().toISOString(),
-      generatedSecrets,
-    });
-    return this.workspace.environmentFor(record);
+  }
+
+  private explain(error: unknown): string {
+    const message = error instanceof Error ? error.message : String(error);
+    const hint = error instanceof SbxError ? error.hint ?? '' : '';
+    return `${message} ${hint}`.trim();
+  }
+
+  /**
+   * The variable map a sandbox created right now would see. Null when it
+   * cannot be built at all — every slot taken, an unreadable registry —
+   * because the checks that consume it should say they were skipped rather
+   * than repeat a failure the check that owns it already reported.
+   */
+  private previewVariables(): EnvMap | null {
+    try {
+      const generatedSecrets: Record<string, string> = {};
+      for (const [name, byteLength] of Object.entries(this.workspace.manifest.generatedSecrets())) {
+        generatedSecrets[name] = this.secretGenerator.generate(byteLength);
+      }
+      const record = new SandboxRecord({
+        name: 'preview',
+        slot: this.nextSlot(),
+        directory: this.workspace.sandboxPathFor('preview'),
+        createdAt: new Date().toISOString(),
+        generatedSecrets,
+      });
+      return this.workspace.environmentFor(record);
+    } catch {
+      return null;
+    }
   }
 
   private nextSlot(): number {
@@ -140,42 +175,93 @@ export class SetupInspector {
       this.dockerAvailability.assertReady();
       return { name: 'docker', ok: true, detail: 'daemon is answering' };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const hint = error instanceof SbxError ? error.hint ?? '' : '';
-      return { name: 'docker', ok: false, detail: `${message} ${hint}`.trim() };
+      return { name: 'docker', ok: false, detail: this.explain(error) };
     }
   }
 
-  private checkTemplates(variables: EnvMap): CheckResult[] {
+  private checkTemplates(variables: EnvMap | null): CheckResult[] {
     return this.workspace.manifest.environmentFiles().map((file) => this.checkOneTemplate(file, variables));
   }
 
-  private checkOneTemplate(file: EnvFileEntry, variables: EnvMap): CheckResult {
+  private checkOneTemplate(file: EnvFileEntry, variables: EnvMap | null): CheckResult {
     const name = `template ${file.from}`;
     const templatePath = path.resolve(this.workspace.manifest.rootDirectory, file.from);
     if (!fs.existsSync(templatePath)) {
       return { name, ok: false, detail: `not found at ${templatePath}` };
     }
+    if (!this.clones.committed(file.from)) {
+      return {
+        name,
+        ok: false,
+        detail: 'exists here but is not committed — a sandbox renders the templates of its own clone, which would not have this file',
+      };
+    }
+    if (variables === null) {
+      return { name, ok: null, detail: 'not rendered: the variables a sandbox would see could not be resolved' };
+    }
     try {
       this.templateRenderer.render(fs.readFileSync(templatePath, 'utf8'), variables);
       return { name, ok: true, detail: `renders into ${file.to}` };
     } catch (error) {
-      return { name, ok: false, detail: error instanceof Error ? error.message : String(error) };
+      return { name, ok: false, detail: this.explain(error) };
     }
   }
 
-  private checkCompose(variables: EnvMap): CheckResult {
+  /**
+   * Rendered files are per-sandbox output that happens to live in a
+   * checkout. Committing one means every sandbox rewrites a tracked file
+   * with its own ports and secrets, which shows as a permanent local
+   * modification, makes `sbx delete` refuse forever, and puts credentials
+   * one `git add -A` away from the remote.
+   */
+  private checkDestinations(): CheckResult[] {
+    return this.workspace.manifest
+      .environmentFiles()
+      .map((file) => this.checkOneDestination(file))
+      .filter((result): result is CheckResult => result !== null);
+  }
+
+  private checkOneDestination(file: EnvFileEntry): CheckResult | null {
+    const name = `rendered ${file.to}`;
+    if (this.clones.committed(file.to)) {
+      return {
+        name,
+        ok: false,
+        detail: `${file.to} is committed. Every sandbox overwrites it with its own ports and secrets, so it reads as modified forever and \`sbx delete\` refuses. Remove it from git and add it to .gitignore`,
+      };
+    }
+    if (!this.clones.ignores(file.to)) {
+      return {
+        name,
+        ok: null,
+        detail: `${file.to} is not covered by .gitignore. It is generated per sandbox, so it shows as untracked and \`sbx delete\` will refuse without --force`,
+      };
+    }
+    return null;
+  }
+
+  private checkCompose(variables: EnvMap | null): CheckResult {
     const composeFile = this.workspace.manifest.composeFile();
     if (!composeFile) return { name: 'services', ok: null, detail: 'no compose file declared' };
     const composePath = path.resolve(this.workspace.manifest.rootDirectory, composeFile);
     if (!fs.existsSync(composePath)) {
       return { name: 'services', ok: false, detail: `${composeFile} not found at ${composePath}` };
     }
+    if (!this.clones.committed(composeFile)) {
+      return {
+        name: 'services',
+        ok: false,
+        detail: `${composeFile} exists here but is not committed — a sandbox reads it from its own clone, which would not have it`,
+      };
+    }
+    if (variables === null) {
+      return { name: 'services', ok: null, detail: 'not checked: the variables a sandbox would see could not be resolved' };
+    }
     try {
       this.templateRenderer.render(fs.readFileSync(composePath, 'utf8'), variables);
       return { name: 'services', ok: true, detail: `${composeFile} resolves every variable it uses` };
     } catch (error) {
-      return { name: 'services', ok: false, detail: error instanceof Error ? error.message : String(error) };
+      return { name: 'services', ok: false, detail: this.explain(error) };
     }
   }
 
