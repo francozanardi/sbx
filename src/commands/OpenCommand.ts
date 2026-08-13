@@ -18,6 +18,8 @@ export interface OpenCommandDeps {
  * sandbox reads the same as it does from any other shell.
  */
 export class OpenCommand implements Command {
+  readonly flags = [] as const;
+
   private readonly workspace: ProjectWorkspace;
   private readonly processRunner: ProcessRunner;
   private readonly terminal: Terminal;
@@ -29,7 +31,7 @@ export class OpenCommand implements Command {
   }
 
   execute(argumentList: ArgumentList): void {
-    const record = this.workspace.registry.get(argumentList.require(0, 'a sandbox name'));
+    const record = this.workspace.requireSandbox(argumentList.require(0, 'a sandbox name'));
     const shell = process.env.SHELL ?? '/bin/bash';
     this.terminal.info(`Entering ${record.name}. Type \`exit\` to leave.`);
     process.exitCode = this.processRunner.forwardProgram(shell, [], {

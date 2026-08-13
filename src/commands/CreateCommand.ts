@@ -18,6 +18,8 @@ export interface CreateCommandDeps {
 
 /** Creates a sandbox and leaves it ready to run the project. */
 export class CreateCommand implements Command {
+  readonly flags = ['branch', 'from', 'no-hooks'] as const;
+
   private readonly workspace: ProjectWorkspace;
   private readonly creator: SandboxCreator;
   private readonly reporter: SandboxReporter;
@@ -49,7 +51,11 @@ export class CreateCommand implements Command {
       return await this.creator.create(name, options);
     } catch (error) {
       if (!existedBefore && this.isRegistered(name)) {
-        this.terminal.warn(`"${name.toString()}" was left half-created. Run \`sbx delete ${name.toString()}\` before trying again.`);
+        // --force, because a hook that got far enough to write anything
+        // leaves files a plain delete refuses to destroy.
+        this.terminal.warn(
+          `"${name.toString()}" was left half-created. Run \`sbx delete ${name.toString()} --force\` before trying again.`,
+        );
       }
       throw error;
     }

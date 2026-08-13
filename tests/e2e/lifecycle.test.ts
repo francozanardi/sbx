@@ -129,6 +129,45 @@ describe('sbx lifecycle on a service-less project', () => {
     expect(result.stderr).toContain('Unknown command');
   });
 
+  it('names the sandbox when its clone was removed outside sbx', () => {
+    expect(fixture.sbx('create', 'sb-1').status).toBe(0);
+    fs.rmSync(fixture.sandboxPath('sb-1'), { recursive: true, force: true });
+
+    const rebuild = fixture.sbx('rebuild', 'sb-1');
+    expect(rebuild.status).toBe(1);
+    expect(rebuild.stderr).toContain('its clone is gone');
+
+    // Listing still shows it, because deleting it is the way out.
+    const list = fixture.sbx('list');
+    expect(list.stdout).toContain('(clone missing)');
+
+    const del = fixture.sbx('delete', 'sb-1', '--force');
+    expect(del.status).toBe(0);
+    expect(fixture.sbx('list').stdout).not.toContain('sb-1');
+  });
+
+  it('tells you to force the delete of a sandbox a failed hook left behind', () => {
+    const broken = createFixture({
+      manifest: {
+        name: 'broken',
+        ports: { base: { app: 4900 } },
+        hooks: [
+          { name: 'install', phase: 'prepare', run: 'echo x > leftover.txt' },
+          { name: 'migrate', phase: 'prepare', run: 'exit 3' },
+        ],
+      },
+    });
+    try {
+      const create = broken.sbx('create', 'sb-1');
+      expect(create.status).toBe(1);
+      expect(create.stderr).toContain('sbx delete sb-1 --force');
+      // The advice has to actually work.
+      expect(broken.sbx('delete', 'sb-1', '--force').status).toBe(0);
+    } finally {
+      broken.cleanup();
+    }
+  });
+
   it('delete refuses to drop a sandbox with unsaved work without --force', () => {
     expect(fixture.sbx('create', 'sb-1').status).toBe(0);
     const result = fixture.sbx('delete', 'sb-1');

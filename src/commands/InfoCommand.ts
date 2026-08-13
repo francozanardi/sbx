@@ -10,6 +10,8 @@ export interface InfoCommandDeps {
 
 /** Shows one sandbox in full: its identity and the port each role got. */
 export class InfoCommand implements Command {
+  readonly flags = [] as const;
+
   private readonly workspace: ProjectWorkspace;
   private readonly reporter: SandboxReporter;
 
@@ -19,7 +21,7 @@ export class InfoCommand implements Command {
   }
 
   execute(argumentList: ArgumentList): void {
-    const record = this.workspace.registry.get(argumentList.require(0, 'a sandbox name'));
+    const record = this.workspace.requireSandbox(argumentList.require(0, 'a sandbox name'));
     this.reporter.describe(record);
   }
 }

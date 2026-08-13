@@ -9,6 +9,8 @@ export interface DoctorCommandDeps {
 
 /** Reports whether this project is ready for `sbx create`, and exits non-zero when it is not. */
 export class DoctorCommand implements Command {
+  readonly flags = [] as const;
+
   private readonly inspector: SetupInspector;
   private readonly terminal: Terminal;
 

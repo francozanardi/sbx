@@ -1,7 +1,9 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { PortBlock } from '@/domain/PortBlock.js';
 import { type ProjectManifest } from '@/domain/ProjectManifest.js';
 import { type SandboxRecord } from '@/domain/SandboxRecord.js';
+import { SbxError } from '@/domain/SbxError.js';
 import { ComposeStack } from '@/infrastructure/ComposeStack.js';
 import { type DockerAvailability } from '@/infrastructure/DockerAvailability.js';
 import { type GitClones } from '@/infrastructure/GitClones.js';
@@ -65,6 +67,31 @@ export class ProjectWorkspace {
 
   sandboxPathFor(sandboxName: string): string {
     return path.join(this.sandboxRoot(), sandboxName);
+  }
+
+  /** True when the sandbox's clone is still where the registry says it is. */
+  hasClone(record: SandboxRecord): boolean {
+    return fs.existsSync(record.directory);
+  }
+
+  /**
+   * The named sandbox, with its clone confirmed to still exist.
+   *
+   * Every command that acts *on* a sandbox goes through this rather than
+   * the registry, because a record whose directory was removed behind
+   * sbx's back otherwise produces a plausible-looking success: a rebuild
+   * that renders nothing, a listing that reports a branch it read from
+   * somewhere else.
+   */
+  requireSandbox(name: string): SandboxRecord {
+    const record = this.registry.get(name);
+    if (!this.hasClone(record)) {
+      throw new SbxError(
+        `Sandbox "${record.name}" is registered, but its clone is gone from ${record.directory}.`,
+        `Something removed it outside sbx. \`sbx delete ${record.name} --force\` drops the stale entry, and \`sbx create ${record.name}\` builds it again.`,
+      );
+    }
+    return record;
   }
 
   portBlockFor(slot: number): PortBlock {

@@ -10,6 +10,8 @@ export interface DownCommandDeps {
 
 /** Stops a sandbox's services, keeping their data for the next start. */
 export class DownCommand implements Command {
+  readonly flags = [] as const;
+
   private readonly workspace: ProjectWorkspace;
   private readonly terminal: Terminal;
 
@@ -19,7 +21,7 @@ export class DownCommand implements Command {
   }
 
   execute(argumentList: ArgumentList): void {
-    const record = this.workspace.registry.get(argumentList.require(0, 'a sandbox name'));
+    const record = this.workspace.requireSandbox(argumentList.require(0, 'a sandbox name'));
     if (!this.workspace.manifest.composeFile()) {
       this.terminal.info('This project declares no services. Nothing to stop.');
       return;

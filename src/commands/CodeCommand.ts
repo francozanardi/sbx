@@ -15,6 +15,8 @@ export interface CodeCommandDeps {
  * is injected.
  */
 export class CodeCommand implements Command {
+  readonly flags = [] as const;
+
   private readonly workspace: ProjectWorkspace;
   private readonly processRunner: ProcessRunner;
 
@@ -24,7 +26,7 @@ export class CodeCommand implements Command {
   }
 
   execute(argumentList: ArgumentList): void {
-    const record = this.workspace.registry.get(argumentList.require(0, 'a sandbox name'));
+    const record = this.workspace.requireSandbox(argumentList.require(0, 'a sandbox name'));
     const editor = process.env.SBX_EDITOR ?? 'code';
     this.processRunner.runProgram(editor, [record.directory]);
   }

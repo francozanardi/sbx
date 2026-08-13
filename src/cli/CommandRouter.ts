@@ -5,6 +5,12 @@ import { type HelpText } from '@/cli/HelpText.js';
 export const HELP_TOKENS = new Set(['help', '--help', '-h']);
 
 export interface Command {
+  /**
+   * Flags this command accepts, without the leading `--`. Declared here
+   * rather than read ad hoc so that anything else on the command line is
+   * refused centrally, and no command can forget to.
+   */
+  readonly flags: readonly string[];
   execute(argumentList: ArgumentList): Promise<void> | void;
 }
 
@@ -31,6 +37,7 @@ export class CommandRouter {
         `Known commands: ${[...this.commandsByName.keys()].join(', ')}.`,
       );
     }
+    argumentList.rejectUnknownFlags(commandName, command.flags);
     await command.execute(argumentList);
   }
 }

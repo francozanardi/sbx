@@ -12,6 +12,8 @@ export interface DeleteCommandDeps {
 
 /** Removes a sandbox and everything that belongs to it. */
 export class DeleteCommand implements Command {
+  readonly flags = ['force'] as const;
+
   private readonly workspace: ProjectWorkspace;
   private readonly remover: SandboxRemover;
   private readonly terminal: Terminal;

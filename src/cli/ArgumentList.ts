@@ -69,11 +69,36 @@ export class ArgumentList {
 
   flag(name: string, fallback: string | null = null): string | null {
     const value = this.flags[name];
+    if (value === true) {
+      throw new SbxError(
+        `\`--${name}\` needs a value.`,
+        `Write it as \`--${name}=<value>\`, or as \`--${name} <value>\`.`,
+      );
+    }
     if (typeof value === 'string') return value;
     return fallback;
   }
 
   hasFlag(name: string): boolean {
     return this.flags[name] === true;
+  }
+
+  /**
+   * A flag the command does not know is almost always a typo, and every
+   * one of them changes what the command does: `--hardd` quietly runs a
+   * plain rebuild, `--nohooks` quietly runs the hooks. Refusing beats
+   * doing something adjacent to what was asked.
+   */
+  rejectUnknownFlags(commandName: string, accepted: readonly string[]): void {
+    const permitted = new Set(accepted);
+    for (const name of Object.keys(this.flags)) {
+      if (permitted.has(name)) continue;
+      throw new SbxError(
+        `\`sbx ${commandName}\` does not take a \`--${name}\` flag.`,
+        permitted.size > 0
+          ? `It accepts: ${accepted.map((flag) => `--${flag}`).join(', ')}.`
+          : 'It takes no flags.',
+      );
+    }
   }
 }

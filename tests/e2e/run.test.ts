@@ -50,11 +50,11 @@ describe('sbx run', () => {
     expect(result.stderr).toContain('Missing the command');
   });
 
-  it('names the missing directory rather than blaming the program', () => {
+  it('names the missing clone rather than blaming the program', () => {
     fs.rmSync(fixture.sandboxPath('sb-1'), { recursive: true, force: true });
     const result = fixture.sbx('run', 'sb-1', '--', 'node', '--version');
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain('does not exist');
+    expect(result.stderr).toContain('its clone is gone');
     expect(result.stderr).not.toContain('not installed');
   });
 });

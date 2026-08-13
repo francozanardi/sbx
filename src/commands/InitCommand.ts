@@ -12,6 +12,8 @@ export interface InitCommandDeps {
  * is left to decide.
  */
 export class InitCommand implements Command {
+  readonly flags = [] as const;
+
   private readonly scaffolder: ManifestScaffolder;
   private readonly terminal: Terminal;
 

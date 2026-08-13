@@ -12,6 +12,8 @@ export interface UpCommandDeps {
 
 /** Starts a sandbox's stateful services and waits until they are healthy. */
 export class UpCommand implements Command {
+  readonly flags = [] as const;
+
   private readonly workspace: ProjectWorkspace;
   private readonly reporter: SandboxReporter;
   private readonly terminal: Terminal;
@@ -23,7 +25,7 @@ export class UpCommand implements Command {
   }
 
   execute(argumentList: ArgumentList): void {
-    const record = this.workspace.registry.get(argumentList.require(0, 'a sandbox name'));
+    const record = this.workspace.requireSandbox(argumentList.require(0, 'a sandbox name'));
     if (!this.workspace.manifest.composeFile()) {
       this.terminal.info('This project declares no services. Nothing to start.');
       return;

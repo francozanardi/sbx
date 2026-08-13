@@ -20,6 +20,8 @@ export interface RebuildCommandDeps {
  *   sbx rebuild <name> --hard  destroy services and volumes, then install + migrate + seed
  */
 export class RebuildCommand implements Command {
+  readonly flags = ['data', 'hard', 'no-hooks'] as const;
+
   private readonly workspace: ProjectWorkspace;
   private readonly rebuilder: SandboxRebuilder;
   private readonly reporter: SandboxReporter;
@@ -33,7 +35,7 @@ export class RebuildCommand implements Command {
   }
 
   execute(argumentList: ArgumentList): void {
-    const record = this.workspace.registry.get(argumentList.require(0, 'a sandbox name'));
+    const record = this.workspace.requireSandbox(argumentList.require(0, 'a sandbox name'));
     const mode = this.modeOf(argumentList);
     this.terminal.heading(`Rebuilding sandbox ${record.name}`);
     this.rebuilder.rebuild(record, {

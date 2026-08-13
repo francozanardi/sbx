@@ -15,10 +15,15 @@ export class SandboxReporter {
   describe(record: SandboxRecord): void {
     this.terminal.heading(`sandbox ${record.name}`);
     this.terminal.info(`  slot       ${String(record.slot)}`);
-    this.terminal.info(`  branch     ${this.workspace.branchOf(record) ?? '(detached)'}`);
+    this.terminal.info(`  branch     ${this.describeBranch(record)}`);
     this.terminal.info(`  directory  ${record.directory}`);
     this.terminal.blank();
     this.describePorts(record);
+  }
+
+  private describeBranch(record: SandboxRecord): string {
+    if (!this.workspace.hasClone(record)) return '(clone missing)';
+    return this.workspace.branchOf(record) ?? '(detached)';
   }
 
   private describePorts(record: SandboxRecord): void {

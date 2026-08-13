@@ -19,6 +19,8 @@ export interface RunCommandDeps {
  * test suite indistinguishable from a broken sandbox.
  */
 export class RunCommand implements Command {
+  readonly flags = [] as const;
+
   private readonly workspace: ProjectWorkspace;
   private readonly processRunner: ProcessRunner;
 
@@ -28,7 +30,7 @@ export class RunCommand implements Command {
   }
 
   execute(argumentList: ArgumentList): void {
-    const record = this.workspace.registry.get(argumentList.require(0, 'a sandbox name'));
+    const record = this.workspace.requireSandbox(argumentList.require(0, 'a sandbox name'));
     const [program, ...programArguments] = argumentList.passthrough;
     if (!program) {
       throw new SbxError('Missing the command to run.', 'Put it after `--`, as in `sbx run sb-1 -- npm run dev`.');
