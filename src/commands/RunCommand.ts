@@ -12,6 +12,11 @@ export interface RunCommandDeps {
 /**
  * Runs a command inside a sandbox: from its directory, with its port block
  * and credentials in the environment.
+ *
+ * This is the command agents drive sandboxes with, so it is a transparent
+ * wrapper: the child's exit status becomes sbx's own, and a child that
+ * merely failed prints nothing extra. Anything else would make a failing
+ * test suite indistinguishable from a broken sandbox.
  */
 export class RunCommand implements Command {
   private readonly workspace: ProjectWorkspace;
@@ -28,7 +33,7 @@ export class RunCommand implements Command {
     if (!program) {
       throw new SbxError('Missing the command to run.', 'Put it after `--`, as in `sbx run sb-1 -- npm run dev`.');
     }
-    this.processRunner.runProgram(program, programArguments, {
+    process.exitCode = this.processRunner.forwardProgram(program, programArguments, {
       cwd: record.directory,
       env: this.workspace.environmentFor(record),
     });

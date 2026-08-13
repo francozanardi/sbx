@@ -103,7 +103,7 @@ export class CommandRegistry {
       ['up', new UpCommand({ workspace, reporter, terminal: this.terminal })],
       ['down', new DownCommand({ workspace, terminal: this.terminal })],
       ['run', new RunCommand({ workspace, processRunner: this.processRunner })],
-      ['open', new OpenCommand({ workspace, terminal: this.terminal })],
+      ['open', new OpenCommand({ workspace, processRunner: this.processRunner, terminal: this.terminal })],
       ['code', new CodeCommand({ workspace, processRunner: this.processRunner })],
       ['delete', new DeleteCommand({ workspace, remover, terminal: this.terminal })],
       ['doctor', new DoctorCommand({ inspector, terminal: this.terminal })],
