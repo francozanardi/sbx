@@ -13,9 +13,10 @@ had very little human review.** It works on the author's machine and its
 behaviour has been exercised by hand, but nobody has read it line by line
 and there is no automated test suite beyond one end-to-end smoke test in CI.
 
-Worth knowing what it touches: it creates and removes git clones, starts
-and destroys Docker containers and volumes, and writes files under your
-home directory. All of that is scoped to the sandboxes it manages.
+Worth knowing what it touches: it creates and removes git clones, adds and
+removes remotes in the host repository's `.git/config`, starts and destroys
+Docker containers and volumes, and writes files under your home directory.
+All of that is scoped to the sandboxes it manages.
 
 ## Install
 
@@ -51,85 +52,102 @@ environment variables, not hardcoded.
 
 ```bash
 sbx create lane-a
-sbx run lane-a -- pnpm dev   # or whatever your dev command is
+sbx open lane-a
 ```
+
+`sbx open` drops you into a shell in the sandbox's directory, with its
+ports and credentials loaded as environment variables. Run the project as
+you normally would. Type `exit` to return.
 
 ## Concepts
 
 A few terms used across the docs and the commands.
 
 - **Host.** Your normal checkout of the repository, the one you work in
-  every day. sbx does not touch it.
-- **Copy.** An independent clone of your repository, placed next to the
+  every day.
+- **Copy.** An independent clone of the repository, placed next to the
   host, with its own ports, services, config and data. The CLI and skills
   call these `sandboxes`; the words mean the same thing.
-- **Lane.** A copy used as a long-lived workspace, reused across tasks
-  instead of created and thrown away. This is the intended way to use sbx.
+- **Lane.** A copy used as a long-lived workspace, kept around and reused
+  across tasks. This is the intended way to use sbx.
 - **Slot.** A number that identifies a copy. The host is slot 0. Every
   port a copy uses is shifted by its slot, so nothing collides.
 - **Manifest.** The `sandbox.config.json` file at your repository root.
   Every copy reads from it.
 
-Inside a copy there are two git remotes: `origin` is the project's real
-remote, and `host` points at your host checkout. Commits made in a copy
-stay there until you push them or fetch them from the host.
+Two git remotes are set up automatically:
+
+- Inside a copy, `host` points at your host checkout, and `origin` points
+  at the project's real remote.
+- In your host, `sbx-<name>` points at each copy. `sbx create lane-a` adds
+  `sbx-lane-a` to your host's `.git/config`; `sbx delete lane-a` removes
+  it. These remotes are local to your `.git` and are never pushed anywhere.
+
+Commits made in a copy stay there until you push them or fetch them from
+the host through these remotes.
 
 | Command | |
 |---|---|
 | `sbx create <name>` | New copy. Fetches `origin` and lands on its default branch |
 | `sbx sync <name>` | Update an existing copy: config, services, dependencies, migrations |
-| `sbx run <name> -- <cmd>` | Run a command inside it |
+| `sbx open <name>` | Interactive subshell inside the copy: its directory as cwd, its env loaded |
+| `sbx code <name>` | Open the copy in `$SBX_EDITOR` (default `code`). No env is injected |
+| `sbx run <name> -- <cmd>` | Run a single command inside the copy, for scripts and one-shots |
 | `sbx list` | Every copy and whether its services are up |
 | `sbx info <name>` | Where it lives and which ports it got |
 | `sbx up <name>` / `sbx down <name>` | Start or stop its services |
-| `sbx seed <name> --reset` | Wipe its data and seed it again |
-| `sbx open <name>` | Open it in your editor |
-| `sbx env <name>` | Its variables as shell exports |
+| `sbx seed <name> --reset` | Delete the copy's DB data and run its seed again |
 | `sbx delete <name>` | Remove it. Refuses while it holds unpushed or uncommitted work |
 | `sbx doctor` | Check what would break a create |
 
-`create` accepts `--from <ref>` to pick a different start point, and
-`--branch <name>` to create a local branch at that point.
+`create` also accepts `--from <ref>` to pick a different starting point,
+and `--branch <name>` to create a local branch at that point.
 
 ## Common workflows
 
 Every copy is a normal git clone. sbx does not wrap `git`.
 
-### Create a lane and work in it
+### Work in a lane from the terminal
 
 ```bash
-sbx create lane-a
 sbx open lane-a
 ```
 
-`sbx create` fetches `origin` and lands on the remote's default branch, so
-the lane starts from current `main`. When a task begins, switch to a task
-branch the same way you would in the host:
+You are now in a shell whose working directory is the lane, with the
+lane's ports, credentials and secrets in the environment. Everything runs
+the way it does in the host: `pnpm dev`, `pnpm test`, `git status`, `git
+switch -c feat/x`, all of it. `exit` closes the shell and returns you to
+where you were.
+
+### Work in a lane from an editor
 
 ```bash
-sbx run lane-a -- git switch -c feat/x origin/main
-sbx run lane-a -- pnpm dev
+sbx code lane-a
 ```
 
-`sbx run` runs its argument in the lane's directory with the lane's
-environment. Any command that reads ports or credentials has to go through
-it. Everything else (plain `git`, an editor, a shell) can run against the
-lane's directory directly.
+This opens the lane's directory in your editor. It does not inject any
+environment. In each integrated terminal that needs the lane's ports or
+credentials, run `sbx open lane-a` and work from there.
 
-### Start a new task in the same lane
+### Move a lane to a different branch
 
-Rebuild the workspace so nothing from the previous task carries over:
+Inside the lane, switch branches the way you would in any git clone:
 
 ```bash
-sbx run lane-a -- git fetch origin
-sbx run lane-a -- git switch -c feat/y origin/main
-sbx sync lane-a              # installs new dependencies, runs new migrations
-sbx seed lane-a --reset      # if the task needs clean data
+sbx open lane-a
+git fetch origin
+git switch -c feat/x origin/main
 ```
 
-Ports and secrets stay stable across every task in the lane. That matters
-when a port has to be registered somewhere external, like an OAuth
-redirect URI allowlist.
+If the new branch adds dependencies or migrations, install and run them
+with `sbx sync`:
+
+```bash
+sbx sync lane-a
+```
+
+If the task needs a fresh database, `sbx seed lane-a --reset` deletes the
+current data and runs the seed hook again.
 
 Do not run `sbx sync` while an agent is working in the lane. It rewrites
 files the agent did not touch, and the agent will try to "fix" what it
@@ -137,16 +155,27 @@ finds.
 
 ### Fetch a branch from a lane into the host
 
-A lane is a git repository on disk. From the host checkout, fetch by path:
+Each lane is registered as a remote of your host repository under the name
+`sbx-<name>`. From your host checkout:
 
 ```bash
-# The path of the lane is the "directory" field of `sbx info lane-a`.
-git fetch <lane-directory> feat/x
+git fetch sbx-lane-a feat/x
 git switch feat/x
 ```
 
-Once the branch is in the host, push it, merge it or cherry-pick from it
+Once the branch is in your host, push it, merge it or cherry-pick from it
 like any other branch.
+
+### Pull work from the host into a lane
+
+Inside a lane, the `host` remote points at your host checkout. Fetch and
+merge like any other remote:
+
+```bash
+sbx open lane-a
+git fetch host
+git merge host/main
+```
 
 ### Delete a lane
 
@@ -154,9 +183,10 @@ like any other branch.
 sbx delete lane-a
 ```
 
-`delete` refuses while the lane holds commits no remote has, or files that
-are not committed, and prints how to recover them. Push the branch, or
-fetch it into the host, before removing the lane.
+`delete` refuses while the lane holds commits no remote has, or files
+that are not committed, and prints how to recover them. Push the branch,
+or fetch it into the host with `git fetch sbx-lane-a <branch>`, before
+removing the lane.
 
 ## What it is not
 
@@ -197,6 +227,8 @@ From that number everything else follows:
   with the same `origin` and a `host` remote pointing back at it. Cloning
   from a local path lets git hardlink the object database, so it costs
   almost nothing on disk.
+- A **remote in your host** named `sbx-<name>` pointing at the copy, so
+  fetching from it needs no path lookup.
 - **Services** from your Compose file, run as a separate Compose project,
   so containers and volumes never overlap.
 - **Ports** shifted by the slot, so nothing collides.
@@ -216,9 +248,9 @@ Everything a copy needs is one map, built from four sources:
 | The slot | `API_PORT`, `SBX_NAME` |
 
 That same map renders your config files and is injected into every command
-you run with `sbx run`, so the two can never disagree. A template that
-references a name the map does not contain stops the render instead of
-writing an empty value.
+you run with `sbx run` or `sbx open`, so the two can never disagree. A
+template that references a name the map does not contain stops the render
+instead of writing an empty value.
 
 ## What a copy costs
 

@@ -27,14 +27,17 @@ export class HelpText {
         usage: 'sbx run <name> -- <command> [args...]',
         summary: "Run a command in a sandbox's directory and environment.",
       },
-      { usage: 'sbx env <name>', summary: "Print a sandbox's variables as shell exports." },
       {
-        usage: 'sbx open <name>   (editor from $SBX_EDITOR, default `code`)',
-        summary: "Open a sandbox's directory in your editor.",
+        usage: 'sbx open <name>',
+        summary: "Start an interactive subshell in a sandbox: its directory as cwd, its variables in the environment. Type `exit` to leave.",
+      },
+      {
+        usage: 'sbx code <name>   (editor from $SBX_EDITOR, default `code`)',
+        summary: "Open a sandbox's directory in your editor. Env vars are not injected; run `sbx open` inside a terminal to load them.",
       },
       {
         usage: 'sbx delete <name> [--force]',
-        summary: 'Delete a sandbox: services, volumes, clone, registry entry. Refuses while it holds unsaved work.',
+        summary: 'Delete a sandbox: services, volumes, clone, host remote, registry entry. Refuses while it holds unsaved work.',
       },
       { usage: 'sbx doctor', summary: 'Check this project for anything that would break `sbx create`.' },
       { usage: 'sbx init', summary: 'Write a starting sandbox.config.json into this project.' },
@@ -81,7 +84,7 @@ export class HelpText {
 
   printEnvironment() {
     this.terminal.heading('Environment');
-    this.terminal.info('  SBX_EDITOR    Editor invoked by `sbx open` (default: code).');
+    this.terminal.info('  SBX_EDITOR    Editor invoked by `sbx code` (default: code).');
     this.terminal.info('  SBX_DEBUG=1   Include stack traces in error output.');
     this.terminal.blank();
   }

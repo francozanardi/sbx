@@ -180,6 +180,37 @@ export class GitClones {
     fs.rmSync(destinationPath, { recursive: true, force: true });
   }
 
+  /**
+   * Adds a remote in the host repository pointing at a sandbox on disk, so
+   * that `git fetch sbx-<name> <branch>` in the host reaches the sandbox
+   * without spelling out its path. `.git/config` is per-clone, so this
+   * does not touch the project's shared configuration.
+   *
+   * Best-effort: a project that is not a git checkout, or one where the
+   * remote already exists, must not fail the create.
+   */
+  registerHostRemote(remoteName, targetPath) {
+    try {
+      this.processRunner.captureProgram('git', ['remote', 'add', remoteName, targetPath], {
+        cwd: this.repositoryDirectory,
+      });
+    } catch {
+      try {
+        this.processRunner.captureProgram('git', ['remote', 'set-url', remoteName, targetPath], {
+          cwd: this.repositoryDirectory,
+        });
+      } catch {}
+    }
+  }
+
+  unregisterHostRemote(remoteName) {
+    try {
+      this.processRunner.captureProgram('git', ['remote', 'remove', remoteName], {
+        cwd: this.repositoryDirectory,
+      });
+    } catch {}
+  }
+
   /** The branch checked out right now, or null when the clone is detached or gone. */
   currentBranch(directory = this.repositoryDirectory) {
     try {

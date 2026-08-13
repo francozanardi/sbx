@@ -1,8 +1,8 @@
+import { CodeCommand } from '../commands/CodeCommand.mjs';
 import { CreateCommand } from '../commands/CreateCommand.mjs';
 import { DeleteCommand } from '../commands/DeleteCommand.mjs';
 import { DoctorCommand } from '../commands/DoctorCommand.mjs';
 import { DownCommand } from '../commands/DownCommand.mjs';
-import { EnvCommand } from '../commands/EnvCommand.mjs';
 import { InfoCommand } from '../commands/InfoCommand.mjs';
 import { InitCommand } from '../commands/InitCommand.mjs';
 import { ListCommand } from '../commands/ListCommand.mjs';
@@ -91,8 +91,8 @@ export class CommandRegistry {
       ['down', new DownCommand({ workspace, terminal: this.terminal })],
       ['seed', new SeedCommand({ workspace, hookRunner, terminal: this.terminal })],
       ['run', new RunCommand({ workspace, processRunner: this.processRunner })],
-      ['env', new EnvCommand({ workspace, terminal: this.terminal })],
-      ['open', new OpenCommand({ workspace, processRunner: this.processRunner })],
+      ['open', new OpenCommand({ workspace, terminal: this.terminal })],
+      ['code', new CodeCommand({ workspace, processRunner: this.processRunner })],
       ['delete', new DeleteCommand({ workspace, remover, terminal: this.terminal })],
       ['doctor', new DoctorCommand({ inspector, terminal: this.terminal })],
       ['init', this.buildInit()],

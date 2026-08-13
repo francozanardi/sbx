@@ -93,6 +93,7 @@ export class SandboxCreator {
     fs.mkdirSync(this.workspace.sandboxRoot(), { recursive: true });
     this.terminal.step(`clone ${directory}`);
     this.clones.create(directory, { branch, startPoint });
+    this.clones.registerHostRemote(`sbx-${name}`, directory);
 
     const record = new SandboxRecord({
       name,

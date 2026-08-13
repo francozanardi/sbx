@@ -23,6 +23,7 @@ export class SandboxRemover {
     if (!force) this.rejectUnsavedWork(record);
     this.destroyServices(record);
     this.removeDirectory(record);
+    this.clones.unregisterHostRemote(`sbx-${record.name}`);
     this.workspace.registry.remove(record.name);
   }
 
@@ -33,7 +34,7 @@ export class SandboxRemover {
     if (branches.length === 0 && changes.length === 0) return;
     throw new SbxError(
       `"${record.name}" holds work that exists nowhere else: ${this.describe(branches, changes)}.`,
-      `Push it, or pull it into the project with \`git -C ${this.workspace.manifest.rootDirectory} fetch ${record.directory} <branch>\`. Pass --force to delete it anyway.`,
+      `Push it, or pull it into the project with \`git -C ${this.workspace.manifest.rootDirectory} fetch sbx-${record.name} <branch>\`. Pass --force to delete it anyway.`,
     );
   }
 
