@@ -18,7 +18,7 @@ export class HelpText {
     this.commandEntries = [
       {
         usage: 'sbx create <name> [--branch=<branch>] [--from=<ref>] [--no-hooks]',
-        summary: 'Create a sandbox: clone, port block, services, seeded data. Default: fetch origin and check out its default branch. --branch creates a local branch of that name. --from picks a starting ref.',
+        summary: 'Create a sandbox: clone, port block, services, seeded data. Default: fetch origin and check out its default branch. --branch creates a local branch of that name. --from picks a starting ref. Run it from the host checkout, not from inside a sandbox.',
       },
       {
         usage: 'sbx rebuild <name> [--data | --hard] [--no-hooks]',
@@ -30,7 +30,7 @@ export class HelpText {
       { usage: 'sbx down <name>', summary: "Stop a sandbox's services, keeping its data." },
       {
         usage: 'sbx run <name> -- <command> [args...]',
-        summary: "Run a command in a sandbox's directory and environment.",
+        summary: "Run a command in a sandbox's directory and environment. Its output and exit status pass through unchanged.",
       },
       {
         usage: 'sbx open <name>',
@@ -42,7 +42,7 @@ export class HelpText {
       },
       {
         usage: 'sbx delete <name> [--force]',
-        summary: 'Delete a sandbox: services, volumes, clone, host remote, registry entry. Refuses while it holds unsaved work.',
+        summary: 'Delete a sandbox: services, volumes, clone, host remote, registry entry. Refuses while it holds unsaved work. Run it from the host checkout.',
       },
       { usage: 'sbx doctor', summary: 'Check this project for anything that would break `sbx create`.' },
       { usage: 'sbx init', summary: 'Write a starting sandbox.config.json into this project.' },

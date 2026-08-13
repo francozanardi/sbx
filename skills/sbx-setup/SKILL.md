@@ -40,20 +40,31 @@ detects. It does not guess ports, services or seeds.
 
 ```json
 "ports": {
-  "base": { "api": 3000, "web": 5173, "postgres": 5432 },
-  "stride": 10,
-  "maxSlots": 9
+  "base": { "api": 3000, "web": 5173, "postgres": 5432 }
 }
 ```
 
 `stride` defaults to 10 and `maxSlots` to 9. Omit them unless the project
-needs other values.
+needs other values — a default spelled out reads as one that was chosen.
 
 Each role is published as `ROLE_PORT`. `api` becomes `API_PORT`,
 `blobConsole` becomes `BLOB_CONSOLE_PORT`. Add `"env": { "api": "HTTP_PORT" }`
-only for roles whose variable the project already names differently.
+only for roles whose variable the project already names differently. Two
+roles cannot share a variable name, and role names have to survive the
+translation: `db-main` would yield `DB-MAIN_PORT`, which no process can
+read, so name it `dbMain` or publish it explicitly.
 
-`stride` must exceed the widest gap between two base ports.
+**No two base ports may be an exact multiple of `stride` apart.** Every
+port shifts by slot × stride, so with `{ "api": 4940, "db": 4950 }` and a
+stride of 10, slot 1's `api` lands on 4950 — the port this checkout is
+already using for `db`. Round numbers 10 or 100 apart are the usual way
+into this. sbx refuses the manifest and names both roles, so there is
+nothing to work out by hand; move one base port or pick another stride.
+
+Changing `ports.base` or `stride` later moves the ports of sandboxes that
+already exist, since a block is derived rather than stored. `sbx doctor`
+fails on it and `sbx rebuild` warns before it happens, but their running
+services and any externally registered URL still have to be dealt with.
 
 ## 4. Declare the services, if any
 
@@ -101,6 +112,25 @@ An unresolvable name **fails the render**. It never becomes an empty
 string, because a silently blank credential fails much later and much
 further from its cause.
 
+Four rules the manifest is checked against:
+
+- **Every `to` belongs in `.gitignore`.** It is regenerated per sandbox
+  with that sandbox's ports and secrets. Committed, it reads as modified
+  in every sandbox forever, `sbx delete` refuses for good, and the
+  credentials are one `git add -A` from the remote. `sbx doctor` fails on
+  a committed one and flags an unignored one.
+- **`from` and `to` stay inside the repository and the sandbox.** A `..`
+  segment is refused; it would write somewhere no sandbox owns and
+  nothing cleans up.
+- **`generate` values are byte counts, at least 16.** 32 is a good
+  default. They are minted once per sandbox and never rotated, because
+  rotating would invalidate every session and encrypted value the sandbox
+  produced before.
+- **Names must not start with `SBX_` and must not collide.** sbx sets
+  `SBX_PROJECT`, `SBX_NAME`, `SBX_SLOT`, `SBX_DIRECTORY` and `SBX_BRANCH`
+  itself, and one name declared twice across `variables`, `generate` and
+  `ports.env` means one of the two never reaches a template.
+
 Machine-wide credentials go in `~/.sbx/<project>/secrets.env` once, by
 hand. Ship a `secrets.env.example` in the repository so the list is
 discoverable.
@@ -114,7 +144,7 @@ required fields:
 
 - `name`: a unique string. Only used for logs and error messages, so
   a failure prints `` The `<name>` hook failed: … ``. Not a keyword.
-- `phase`: either `"prepare"` or `"populate"`. Nothing else validates.
+- `phase`: either `"prepare"` or `"populate"`. Nothing else is accepted.
 - `run`: the shell command line, executed with `sh -c`.
 
 ```json

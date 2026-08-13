@@ -32,8 +32,15 @@ happens inside the sandbox the same way it happens in the host.
 
 ## Commands
 
-Run them from anywhere inside the project. The manifest is found by
-walking up from the working directory.
+Run them from anywhere inside the project: the manifest is found by
+walking up from the working directory. The exception is `sbx create` and
+`sbx delete`, which write remotes into the host checkout's `.git` and so
+have to be run from the host. A sandbox carries the manifest like every
+other clone, so running them from inside one would clone a copy of a
+copy; they refuse and print where the host is.
+
+A flag sbx does not know is refused rather than ignored, so a typo like
+`--hardd` is an error and never a quieter version of the command.
 
 ```bash
 sbx create <name>          # allocate slot, clone, register host remote,
@@ -46,7 +53,8 @@ sbx rebuild <name> --data  # render env, start services,
 sbx rebuild <name> --hard  # render env, destroy services and volumes, start services,
                            # run every prepare hook, run every populate hook
 sbx run <name> -- <cmd>    # run <cmd> in the sandbox's directory with its env;
-                           # stdout, stderr and exit code all forward
+                           # stdout, stderr and exit code all forward,
+                           # and sbx prints nothing of its own on failure
 sbx open <name>            # interactive $SHELL in the sandbox
                            # (for humans at a terminal; not for agents)
 sbx code <name>            # launch $SBX_EDITOR (default: code) at the sandbox
@@ -109,8 +117,14 @@ sbx run lane-a -- pnpm dev
 `run` executes the command in the sandbox's directory with its ports,
 credentials and generated secrets in the environment. Every command that
 needs those values, and every command that has to read the sandbox's
-files at all, goes through `run`. One command per call, exit code
-propagated, no shell state to carry across.
+files at all, goes through `run`. One command per call, no shell state to
+carry across.
+
+`run` is a transparent wrapper: the command's exit status becomes sbx's
+own, and a command that merely failed produces no output from sbx. So
+`sbx run lane-a -- pnpm test` exiting 1 means the tests failed, and
+anything on stderr starting with `error:` is sbx itself — a sandbox that
+does not exist, a clone that is gone, a program that is not installed.
 
 Two other commands exist for humans and can be mentioned when relevant
 but should not be used from an agent:
@@ -135,7 +149,11 @@ but should not be used from an agent:
 4. **Commit changes to the manifest and its templates** like any other
    code. A sandbox only sees committed files, so the next one reads them
    from its own clone.
-5. **The branch is the deliverable, and it only exists here.** A sandbox
+5. **`create` and `delete` run from the host checkout, never from inside
+   a sandbox.** They write remotes into the host's `.git`. sbx refuses
+   them from inside a sandbox and prints the host's path; every other
+   command is fine from anywhere.
+6. **The branch is the deliverable, and it only exists here.** A sandbox
    owns its refs, so a commit made inside one is nowhere else until it
    is pushed or fetched. Do not push or merge unless asked. Say so when
    the work is finished; the human integrates it with `git fetch

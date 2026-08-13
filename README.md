@@ -10,8 +10,7 @@ shared.
 
 **This code was written almost entirely by a generative AI model, and it has
 had very little human review.** It works on the author's machine and its
-behaviour has been exercised by hand, but nobody has read it line by line
-and there is no automated test suite beyond one end-to-end smoke test in CI.
+behaviour has been exercised by hand, but nobody has read it line by line.
 
 Worth knowing what it touches: it creates and removes git clones, adds and
 removes remotes in the host repository's `.git/config`, starts and destroys
@@ -91,6 +90,12 @@ Two git remotes are set up automatically:
 Commits made in a copy stay there until you push them or fetch them from
 the host through these remotes.
 
+Because both remotes are written into the host's `.git`, `sbx create` and
+`sbx delete` only run from the host checkout. A copy carries the manifest
+like any other clone, so running them from inside one would quietly clone
+a copy of a copy; they refuse instead and print where the host is. Every
+other command works from anywhere, including from inside a copy.
+
 | Command | |
 |---|---|
 | `sbx create <name>` | New copy. Fetches `origin` and lands on its default branch |
@@ -99,7 +104,7 @@ the host through these remotes.
 | `sbx rebuild <name> --hard` | Destroy services and volumes, then run every `prepare` and `populate` hook |
 | `sbx open <name>` | Interactive subshell inside the copy: its directory as cwd, its env loaded |
 | `sbx code <name>` | Open the copy in `$SBX_EDITOR` (default `code`). No env is injected |
-| `sbx run <name> -- <cmd>` | Run a single command inside the copy, for scripts and one-shots |
+| `sbx run <name> -- <cmd>` | Run a single command inside the copy. Its output and its exit code are yours |
 | `sbx list` | Every copy and whether its services are up |
 | `sbx info <name>` | Where it lives and which ports it got |
 | `sbx up <name>` / `sbx down <name>` | Start or stop its services |
