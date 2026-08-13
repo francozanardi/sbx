@@ -3,7 +3,7 @@ import path from 'node:path';
 
 /**
  * The one place a project's real credentials live: API keys, provider
- * tokens, anything a sandbox needs but must not be copied into a worktree
+ * tokens, anything a sandbox needs but must not be copied into a sandbox
  * by hand. Every sandbox of the project reads the same file.
  *
  * Format is `KEY=value` per line, `#` starts a comment, and surrounding

@@ -5,7 +5,7 @@ import { SbxError } from '../domain/SbxError.mjs';
  * Confirms Docker can actually be used before a command depends on it.
  *
  * Without this, a stopped daemon surfaces as a Compose command exiting
- * non-zero somewhere in the middle of creating a sandbox — after a worktree
+ * non-zero somewhere in the middle of creating a sandbox — after a clone
  * exists, and with the real explanation buried in the output of a step the
  * reader did not ask about.
  *

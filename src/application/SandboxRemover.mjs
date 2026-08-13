@@ -1,25 +1,46 @@
 import fs from 'node:fs';
+import { SbxError } from '../domain/SbxError.mjs';
 
 /**
- * Takes a sandbox apart: its services and their volumes, its worktree, its
- * registry entry, and optionally the branch it was on.
+ * Takes a sandbox apart: its services and their volumes, its clone, and
+ * its registry entry.
  *
- * Every step is best-effort and reported rather than fatal. A teardown
- * that refuses to finish because one piece was already gone leaves the
- * slot occupied forever, which is worse than a warning.
+ * A sandbox owns its refs, so its directory is the only copy of whatever
+ * was committed inside it. Removal therefore refuses to run while it would
+ * destroy work that exists nowhere else, and says how to rescue it. Once
+ * that check passes, every step is best-effort and reported rather than
+ * fatal: a teardown that refuses to finish because one piece was already
+ * gone leaves the slot occupied forever, which is worse than a warning.
  */
 export class SandboxRemover {
-  constructor({ workspace, worktrees, terminal }) {
+  constructor({ workspace, clones, terminal }) {
     this.workspace = workspace;
-    this.worktrees = worktrees;
+    this.clones = clones;
     this.terminal = terminal;
   }
 
-  remove(record, { deleteBranch }) {
+  remove(record, { force }) {
+    if (!force) this.rejectUnsavedWork(record);
     this.destroyServices(record);
-    this.removeWorktree(record);
-    if (deleteBranch) this.removeBranch(record);
+    this.removeDirectory(record);
     this.workspace.registry.remove(record.name);
+  }
+
+  rejectUnsavedWork(record) {
+    if (!fs.existsSync(record.directory)) return;
+    const branches = this.clones.unsavedBranches(record.directory);
+    const changes = this.clones.uncommittedPaths(record.directory);
+    if (branches.length === 0 && changes.length === 0) return;
+    throw new SbxError(
+      `"${record.name}" holds work that exists nowhere else: ${this.describe(branches, changes)}.`,
+      `Push it, or pull it into the project with \`git -C ${this.workspace.manifest.rootDirectory} fetch ${record.directory} <branch>\`. Pass --force to delete it anyway.`,
+    );
+  }
+
+  describe(branches, changes) {
+    const parts = branches.map((branch) => `${branch.commits} commit(s) on ${branch.branch}`);
+    if (changes.length > 0) parts.push(`${changes.length} uncommitted file(s)`);
+    return parts.join(', ');
   }
 
   destroyServices(record) {
@@ -29,15 +50,9 @@ export class SandboxRemover {
     });
   }
 
-  removeWorktree(record) {
-    if (fs.existsSync(record.worktree)) {
-      this.attempt(`remove worktree ${record.worktree}`, () => this.worktrees.remove(record.worktree));
-    }
-    this.attempt('prune worktree list', () => this.worktrees.prune());
-  }
-
-  removeBranch(record) {
-    this.attempt(`delete branch ${record.branch}`, () => this.worktrees.deleteBranch(record.branch));
+  removeDirectory(record) {
+    if (!fs.existsSync(record.directory)) return;
+    this.attempt(`remove ${record.directory}`, () => this.clones.remove(record.directory));
   }
 
   attempt(description, action) {

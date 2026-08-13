@@ -1,18 +1,22 @@
 /**
  * One sandbox as it is persisted between invocations. Holds only what
- * cannot be recomputed: the slot it owns, where its worktree lives, the
- * branch it is on, and the secrets minted for it.
+ * cannot be recomputed: the slot it owns, where its clone lives, and the
+ * secrets minted for it.
+ *
+ * The branch is deliberately absent. A sandbox is a lane rather than a
+ * feature: branches come and go inside it, and a copy written down at
+ * creation would be a lie by the second day. It is read from the clone
+ * whenever it is needed.
  *
  * The generated secrets are stored rather than re-derived because rotating
  * them between runs would invalidate every session and every encrypted
  * value the sandbox produced before.
  */
 export class SandboxRecord {
-  constructor({ name, slot, worktree, branch, createdAt, generatedSecrets }) {
+  constructor({ name, slot, directory, createdAt, generatedSecrets }) {
     this.name = name;
     this.slot = slot;
-    this.worktree = worktree;
-    this.branch = branch;
+    this.directory = directory;
     this.createdAt = createdAt;
     this.generatedSecrets = generatedSecrets ?? {};
   }
@@ -24,8 +28,7 @@ export class SandboxRecord {
   toJson() {
     return {
       slot: this.slot,
-      worktree: this.worktree,
-      branch: this.branch,
+      directory: this.directory,
       createdAt: this.createdAt,
       generatedSecrets: this.generatedSecrets,
     };

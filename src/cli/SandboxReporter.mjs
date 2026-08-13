@@ -7,9 +7,9 @@ export class SandboxReporter {
 
   describe(record) {
     this.terminal.heading(`sandbox ${record.name}`);
-    this.terminal.info(`  slot      ${record.slot}`);
-    this.terminal.info(`  branch    ${record.branch}`);
-    this.terminal.info(`  worktree  ${record.worktree}`);
+    this.terminal.info(`  slot       ${record.slot}`);
+    this.terminal.info(`  branch     ${this.workspace.branchOf(record) ?? '(detached)'}`);
+    this.terminal.info(`  directory  ${record.directory}`);
     this.terminal.blank();
     this.describePorts(record);
   }

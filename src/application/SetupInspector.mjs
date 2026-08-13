@@ -7,17 +7,17 @@ import { SlotAllocator } from '../domain/SlotAllocator.mjs';
 /**
  * Answers "would `sbx create` work here?" without creating anything.
  *
- * Every check reads the current checkout, not a worktree, so it reports on
- * the files as they are right now — including ones not committed yet, which
- * a sandbox would not see.
+ * Every check reads the project's own checkout, not a sandbox, so it
+ * reports on the files as they are right now — including ones not committed
+ * yet, which a sandbox would not see.
  *
  * Each check returns `{ name, ok, detail }`. `ok` is null for findings that
  * are worth reporting but are not failures.
  */
 export class SetupInspector {
-  constructor({ workspace, worktrees, portProbe, secretGenerator, templateRenderer, dockerAvailability }) {
+  constructor({ workspace, clones, portProbe, secretGenerator, templateRenderer, dockerAvailability }) {
     this.workspace = workspace;
-    this.worktrees = worktrees;
+    this.clones = clones;
     this.portProbe = portProbe;
     this.secretGenerator = secretGenerator;
     this.templateRenderer = templateRenderer;
@@ -34,7 +34,7 @@ export class SetupInspector {
       ...this.checkTemplates(variables),
       this.checkCompose(variables),
       this.checkDocker(),
-      this.checkWorktreeLocation(),
+      this.checkSandboxLocation(),
       this.checkHooks(),
     ].filter(Boolean);
   }
@@ -52,8 +52,7 @@ export class SetupInspector {
     const record = new SandboxRecord({
       name: 'preview',
       slot,
-      worktree: this.workspace.worktreePathFor('preview'),
-      branch: 'preview',
+      directory: this.workspace.sandboxPathFor('preview'),
       createdAt: new Date().toISOString(),
       generatedSecrets,
     });
@@ -66,21 +65,20 @@ export class SetupInspector {
   }
 
   /**
-   * Worktrees branch off a commit, so a repository with no history cannot
-   * host a sandbox yet. Git's own message for that case names a revision
-   * rather than the situation, which is worth translating.
+   * A sandbox is cloned at a commit, so a repository with no history cannot
+   * host one yet. Git's own message for that case names a revision rather
+   * than the situation, which is worth translating.
    */
   checkRepository() {
-    try {
-      const branch = this.worktrees.currentBranch();
-      return { name: 'git repository', ok: true, detail: `new sandboxes branch off ${branch}` };
-    } catch {
+    const branch = this.clones.currentBranch();
+    if (!branch) {
       return {
         name: 'git repository',
         ok: false,
         detail: 'no branch to start from — this must be a git repository with at least one commit',
       };
     }
+    return { name: 'git repository', ok: true, detail: `new sandboxes start from ${branch}` };
   }
 
   async checkPorts() {
@@ -158,18 +156,27 @@ export class SetupInspector {
   }
 
   /**
-   * A worktree on a different filesystem than the home directory loses the
-   * link-based sharing every package manager cache relies on: installs stop
-   * being near-free in time and disk and start copying everything.
+   * Hardlinks cannot cross a filesystem boundary, and two kinds of sharing
+   * depend on them. Against the repository it is git's object database,
+   * which a clone borrows instead of duplicating; against the home
+   * directory it is the package manager's cache. Losing either turns a
+   * near-free copy into a real one, in time and in disk.
    */
-  checkWorktreeLocation() {
-    const root = this.workspace.worktreeRoot();
-    const existing = this.nearestExistingDirectory(root);
-    if (fs.statSync(existing).dev === fs.statSync(os.homedir()).dev) return null;
+  checkSandboxLocation() {
+    const root = this.workspace.sandboxRoot();
+    const device = fs.statSync(this.nearestExistingDirectory(root)).dev;
+    const unshared = [];
+    if (device !== fs.statSync(this.workspace.manifest.rootDirectory).dev) {
+      unshared.push('git objects will be copied per sandbox, not hardlinked');
+    }
+    if (device !== fs.statSync(os.homedir()).dev) {
+      unshared.push('dependency caches will be copied, not linked');
+    }
+    if (unshared.length === 0) return null;
     return {
-      name: 'worktree location',
+      name: 'sandbox location',
       ok: null,
-      detail: `${root} is on a different filesystem than ${os.homedir()} — dependency caches will be copied, not linked`,
+      detail: `${root} is on another filesystem — ${unshared.join('; ')}`,
     };
   }
 

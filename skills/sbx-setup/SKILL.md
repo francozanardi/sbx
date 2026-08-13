@@ -75,7 +75,7 @@ volumes: { data: }
 a healthcheck counts as ready the moment it is running, and the first
 migration hits a database that is still initializing.
 
-A project whose state lives in files inside the worktree declares no `compose`
+A project whose state lives in files inside the sandbox declares no `compose`
 at all, and sbx skips Docker entirely.
 
 ## 5. Declare the config files
@@ -91,7 +91,7 @@ each layer overriding the one above it:
 
 ```
 manifest `variables`  →  ~/.sbx/<project>/secrets.env  →  generated secrets
-                      →  the port block  →  SBX_NAME, SBX_SLOT, SBX_WORKTREE, …
+                      →  the port block  →  SBX_NAME, SBX_SLOT, SBX_DIRECTORY, …
 ```
 
 An unresolvable name **fails the render**. It never becomes an empty string,
@@ -112,13 +112,13 @@ hooks: {
 }
 ```
 
-Shell command lines, run from the worktree root with the variables in the
+Shell command lines, run from the sandbox root with the variables in the
 environment. `create` runs install → migrate → seed; `sbx seed --reset` runs
 reset → seed.
 
 ```bash
 sbx doctor
-git commit      # a worktree only sees committed files
+git commit      # a sandbox only sees committed files
 sbx create sb-1
 ```
 

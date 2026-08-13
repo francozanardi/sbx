@@ -7,7 +7,7 @@ import { SecretsFile } from '../infrastructure/SecretsFile.mjs';
 
 /**
  * Resolves everything that is scoped to one project: where its registry
- * and secrets live, where its worktrees go, and the collaborators that act
+ * and secrets live, where its sandboxes go, and the collaborators that act
  * on a single sandbox of it.
  *
  * Paths configured in the manifest win over the tool's own defaults, so a
@@ -15,11 +15,12 @@ import { SecretsFile } from '../infrastructure/SecretsFile.mjs';
  * knowing why.
  */
 export class ProjectWorkspace {
-  constructor(manifest, homePath, processRunner, dockerAvailability) {
+  constructor(manifest, homePath, processRunner, dockerAvailability, clones) {
     this.manifest = manifest;
     this.homePath = homePath;
     this.processRunner = processRunner;
     this.dockerAvailability = dockerAvailability;
+    this.clones = clones;
     this.registry = new JsonSandboxRegistry(path.join(this.stateDirectory(), 'state.json'));
     this.secrets = new SecretsFile(this.secretsPath());
   }
@@ -35,19 +36,24 @@ export class ProjectWorkspace {
       : path.join(this.stateDirectory(), 'secrets.env');
   }
 
-  worktreeRoot() {
-    const configured = this.manifest.worktreeRoot();
+  sandboxRoot() {
+    const configured = this.manifest.sandboxRoot();
     return configured
       ? this.homePath.expand(configured)
-      : this.homePath.defaultWorktreeRootFor(this.manifest.name());
+      : this.homePath.defaultSandboxRootFor(this.manifest.name());
   }
 
-  worktreePathFor(sandboxName) {
-    return path.join(this.worktreeRoot(), sandboxName);
+  sandboxPathFor(sandboxName) {
+    return path.join(this.sandboxRoot(), sandboxName);
   }
 
   portBlockFor(slot) {
     return new PortBlock(this.manifest.basePorts(), this.manifest.portStride(), slot);
+  }
+
+  /** The branch a sandbox has checked out right now, or null when detached. */
+  branchOf(record) {
+    return this.clones.currentBranch(record.directory);
   }
 
   /** The full variable map a sandbox's templates, hooks and commands see. */
@@ -57,6 +63,7 @@ export class ProjectWorkspace {
       record,
       this.portBlockFor(record.slot),
       this.secrets.read(),
+      this.branchOf(record),
     );
     return environment.variables();
   }
@@ -65,8 +72,8 @@ export class ProjectWorkspace {
     const composeFile = this.manifest.composeFile();
     return new ComposeStack(this.processRunner, this.dockerAvailability, {
       projectName: `${this.manifest.name()}-${record.name}`,
-      composeFilePath: composeFile ? path.resolve(record.worktree, composeFile) : null,
-      projectDirectory: record.worktree,
+      composeFilePath: composeFile ? path.resolve(record.directory, composeFile) : null,
+      projectDirectory: record.directory,
     });
   }
 }

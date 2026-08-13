@@ -15,7 +15,7 @@ export class SeedCommand {
   }
 
   runHook(hookName, record, variables) {
-    const ran = this.hookRunner.run(this.workspace.manifest, hookName, record.worktree, variables);
+    const ran = this.hookRunner.run(this.workspace.manifest, hookName, record.directory, variables);
     if (!ran) this.terminal.warn(`This project defines no \`${hookName}\` hook.`);
   }
 }

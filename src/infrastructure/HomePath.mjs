@@ -18,8 +18,8 @@ export class HomePath {
     return path.join(this.homeDirectory, '.sbx', projectName);
   }
 
-  /** Directory holding the worktrees of a single project. */
-  defaultWorktreeRootFor(projectName) {
+  /** Directory holding the sandbox clones of a single project. */
+  defaultSandboxRootFor(projectName) {
     return path.join(this.homeDirectory, 'sandboxes', projectName);
   }
 }

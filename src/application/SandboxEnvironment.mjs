@@ -12,11 +12,12 @@
  * sandbox specifically.
  */
 export class SandboxEnvironment {
-  constructor(manifest, record, portBlock, projectSecrets) {
+  constructor(manifest, record, portBlock, projectSecrets, currentBranch) {
     this.manifest = manifest;
     this.record = record;
     this.portBlock = portBlock;
     this.projectSecrets = projectSecrets;
+    this.currentBranch = currentBranch;
   }
 
   variables() {
@@ -39,13 +40,18 @@ export class SandboxEnvironment {
     return variables;
   }
 
+  /**
+   * `SBX_BRANCH` reports whatever is checked out at this moment, and is
+   * empty on a detached head. Anything deriving a durable name from a
+   * sandbox wants `SBX_NAME`, which does not move.
+   */
   identityVariables() {
     return {
       SBX_PROJECT: this.manifest.name(),
       SBX_NAME: this.record.name,
       SBX_SLOT: String(this.record.slot),
-      SBX_WORKTREE: this.record.worktree,
-      SBX_BRANCH: this.record.branch,
+      SBX_DIRECTORY: this.record.directory,
+      SBX_BRANCH: this.currentBranch ?? '',
     };
   }
 }

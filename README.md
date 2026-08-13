@@ -13,7 +13,7 @@ had very little human review.** Its behaviour has been exercised by hand and it
 works on the author's machine, but nobody has read it line by line and there is
 no automated test suite beyond one end-to-end smoke test in CI.
 
-Worth knowing what it touches: it creates and removes git worktrees, starts and
+Worth knowing what it touches: it creates and removes git clones, starts and
 destroys Docker containers and volumes, and writes files under your home
 directory. All of that is scoped to the sandboxes it manages.
 
@@ -50,13 +50,13 @@ through environment variables, not hardcoded.
 ## Use it
 
 ```bash
-sbx create sb-1            # about 20 seconds
+sbx create sb-1
 sbx run sb-1 -- pnpm dev   # or whatever your dev command is
 ```
 
 | Command | |
 |---|---|
-| `sbx create <name>` | New copy: worktree, services, config, dependencies, seeded data |
+| `sbx create <name>` | New copy: clone, services, config, dependencies, seeded data |
 | `sbx sync <name>` | Bring an existing copy up to date: config, services, dependencies, migrations |
 | `sbx run <name> -- <cmd>` | Run a command inside it |
 | `sbx list` | Every copy and whether its services are up |
@@ -64,7 +64,7 @@ sbx run sb-1 -- pnpm dev   # or whatever your dev command is
 | `sbx up` / `sbx down <name>` | Start or stop its services |
 | `sbx seed <name> --reset` | Wipe its data and seed it again |
 | `sbx open <name>` | Open it in your editor |
-| `sbx delete <name>` | Remove it. Keeps the branch |
+| `sbx delete <name>` | Remove it. Refuses while it holds unpushed or uncommitted work |
 | `sbx doctor` | Check what would break a create |
 
 Point one agent at each copy and let them work.
@@ -102,7 +102,10 @@ normal checkout is slot 0.
 
 From that number everything else follows:
 
-- A **git worktree** on its own branch, sitting next to your checkout.
+- A **git clone** of your repository, sitting next to your checkout, with the
+  same `origin` plus a `host` remote pointing back at it. Cloning from a local
+  path lets git hardlink the object database, so it costs almost nothing on
+  disk.
 - **Services** from your Compose file, run as a separate Compose project, so
   containers and volumes never overlap.
 - **Ports** shifted by the slot, so nothing collides.
@@ -139,9 +142,11 @@ With npm, pip or poetry it is a full copy every time, because their caches hold
 archives rather than linkable files. If that is your case, prefer a few
 long-lived copies over one per task.
 
-One trap either way: keep your copies on the same filesystem as your package
-manager's cache. Across filesystems, linking is impossible and the same install
-took three times longer and cost real disk. `sbx doctor` warns about this.
+One trap either way: keep your copies on the same filesystem as your repository
+and your package manager's cache. Hardlinks cannot cross filesystems, so across
+one both the git objects and the dependencies are copied instead of shared. In
+the same measurement, the install took three times longer and cost real disk.
+`sbx doctor` warns about this.
 
 ## What it cannot isolate
 

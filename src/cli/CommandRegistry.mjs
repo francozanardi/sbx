@@ -21,7 +21,7 @@ import { SandboxSynchronizer } from '../application/SandboxSynchronizer.mjs';
 import { SetupInspector } from '../application/SetupInspector.mjs';
 import { EcosystemCatalog } from '../domain/EcosystemCatalog.mjs';
 import { DockerAvailability } from '../infrastructure/DockerAvailability.mjs';
-import { GitWorktrees } from '../infrastructure/GitWorktrees.mjs';
+import { GitClones } from '../infrastructure/GitClones.mjs';
 import { PortProbe } from '../infrastructure/PortProbe.mjs';
 import { SecretGenerator } from '../infrastructure/SecretGenerator.mjs';
 import { TemplateRenderer } from '../infrastructure/TemplateRenderer.mjs';
@@ -49,8 +49,8 @@ export class CommandRegistry {
   /** Every command, wired against one project. */
   forProject(manifest) {
     const dockerAvailability = new DockerAvailability(this.processRunner);
-    const workspace = new ProjectWorkspace(manifest, this.homePath, this.processRunner, dockerAvailability);
-    const worktrees = new GitWorktrees(this.processRunner, manifest.rootDirectory);
+    const clones = new GitClones(this.processRunner, manifest.rootDirectory);
+    const workspace = new ProjectWorkspace(manifest, this.homePath, this.processRunner, dockerAvailability, clones);
     const hookRunner = new HookRunner(this.processRunner, this.terminal);
     const reporter = new SandboxReporter(workspace, this.terminal);
     const portProbe = new PortProbe();
@@ -65,17 +65,17 @@ export class CommandRegistry {
     });
     const creator = new SandboxCreator({
       workspace,
-      worktrees,
+      clones,
       synchronizer,
       hookRunner,
       secretGenerator,
       portProbe,
       terminal: this.terminal,
     });
-    const remover = new SandboxRemover({ workspace, worktrees, terminal: this.terminal });
+    const remover = new SandboxRemover({ workspace, clones, terminal: this.terminal });
     const inspector = new SetupInspector({
       workspace,
-      worktrees,
+      clones,
       portProbe,
       secretGenerator,
       templateRenderer,
@@ -83,7 +83,7 @@ export class CommandRegistry {
     });
 
     return new Map([
-      ['create', new CreateCommand({ workspace, creator, worktrees, reporter, terminal: this.terminal })],
+      ['create', new CreateCommand({ workspace, creator, clones, reporter, terminal: this.terminal })],
       ['sync', new SyncCommand({ workspace, synchronizer, reporter, terminal: this.terminal })],
       ['list', new ListCommand({ workspace, terminal: this.terminal })],
       ['info', new InfoCommand({ workspace, reporter })],

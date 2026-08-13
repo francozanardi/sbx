@@ -4,21 +4,21 @@ import { SlotAllocator } from '../domain/SlotAllocator.mjs';
 import { SbxError } from '../domain/SbxError.mjs';
 
 /**
- * Brings a sandbox into existence: a worktree of its own, a port block
+ * Brings a sandbox into existence: a clone of its own, a port block
  * nothing else is using, rendered env files, its stateful services, and
  * whatever the project's install, migrate and seed hooks do to it.
  *
- * What is unique to a first run lives here — allocating the slot, cutting
- * the worktree, minting the secrets, seeding the data. Everything that a
+ * What is unique to a first run lives here — allocating the slot, cloning
+ * the repository, minting the secrets, seeding the data. Everything that a
  * later run could repeat is delegated, so the two paths cannot drift.
  *
- * The registry entry is written as soon as the worktree exists, so a run
+ * The registry entry is written as soon as the clone exists, so a run
  * that fails halfway still leaves something the delete command can clean up.
  */
 export class SandboxCreator {
-  constructor({ workspace, worktrees, synchronizer, hookRunner, secretGenerator, portProbe, terminal }) {
+  constructor({ workspace, clones, synchronizer, hookRunner, secretGenerator, portProbe, terminal }) {
     this.workspace = workspace;
-    this.worktrees = worktrees;
+    this.clones = clones;
     this.synchronizer = synchronizer;
     this.hookRunner = hookRunner;
     this.secretGenerator = secretGenerator;
@@ -33,7 +33,7 @@ export class SandboxCreator {
     const slot = this.allocateSlot();
     await this.rejectBusyPorts(slot, name);
 
-    const record = this.provisionWorktree(name, slot, branch, startPoint);
+    const record = this.provisionClone(name, slot, branch, startPoint);
     const variables = this.synchronizer.sync(record, { runHooks });
     if (runHooks) this.seed(record, variables);
 
@@ -77,20 +77,23 @@ export class SandboxCreator {
     }
   }
 
-  provisionWorktree(name, slot, branch, startPoint) {
-    const worktree = this.workspace.worktreePathFor(name);
-    if (this.worktrees.branchExists(branch)) {
-      throw new SbxError(`Branch "${branch}" already exists.`, `Pass --branch=<other>, or remove it with \`git branch -D ${branch}\`.`);
+  /**
+   * The branch name is not checked against the project's branches: a
+   * sandbox owns its refs, so a name already taken elsewhere is free here.
+   */
+  provisionClone(name, slot, branch, startPoint) {
+    const directory = this.workspace.sandboxPathFor(name);
+    if (fs.existsSync(directory)) {
+      throw new SbxError(`${directory} already exists.`, 'Remove it, or pick another sandbox name.');
     }
-    fs.mkdirSync(this.workspace.worktreeRoot(), { recursive: true });
-    this.terminal.step(`worktree ${worktree} on ${branch} from ${startPoint}`);
-    this.worktrees.add(worktree, branch, startPoint);
+    fs.mkdirSync(this.workspace.sandboxRoot(), { recursive: true });
+    this.terminal.step(`clone ${directory} on ${branch} from ${startPoint}`);
+    this.clones.create(directory, branch, startPoint);
 
     const record = new SandboxRecord({
       name,
       slot,
-      worktree,
-      branch,
+      directory,
       createdAt: new Date().toISOString(),
       generatedSecrets: this.mintSecrets(),
     });
@@ -107,6 +110,6 @@ export class SandboxCreator {
   }
 
   seed(record, variables) {
-    this.hookRunner.run(this.workspace.manifest, 'seed', record.worktree, variables);
+    this.hookRunner.run(this.workspace.manifest, 'seed', record.directory, variables);
   }
 }

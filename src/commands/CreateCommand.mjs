@@ -2,10 +2,10 @@ import { SandboxName } from '../domain/SandboxName.mjs';
 
 /** Creates a sandbox and leaves it ready to run the project. */
 export class CreateCommand {
-  constructor({ workspace, creator, worktrees, reporter, terminal }) {
+  constructor({ workspace, creator, clones, reporter, terminal }) {
     this.workspace = workspace;
     this.creator = creator;
-    this.worktrees = worktrees;
+    this.clones = clones;
     this.reporter = reporter;
     this.terminal = terminal;
   }
@@ -14,7 +14,7 @@ export class CreateCommand {
     const name = new SandboxName(argumentList.require(0, 'a sandbox name'));
     const options = {
       branch: argumentList.flag('branch', name.toString()),
-      startPoint: argumentList.flag('from', this.worktrees.currentBranch()),
+      startPoint: argumentList.flag('from', this.clones.currentBranch()),
       runHooks: !argumentList.hasFlag('no-hooks'),
     };
     this.terminal.heading(`Creating sandbox ${name}`);

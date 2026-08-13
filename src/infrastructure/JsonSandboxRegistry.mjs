@@ -6,7 +6,7 @@ import { SbxError } from '../domain/SbxError.mjs';
 const CURRENT_VERSION = 1;
 
 /**
- * Stores the sandboxes of one project in a JSON file outside any worktree,
+ * Stores the sandboxes of one project in a JSON file outside any sandbox,
  * so the record survives deleting the checkout it describes.
  *
  * Writes go through a temporary file and a rename, because a half-written
@@ -67,7 +67,7 @@ export class JsonSandboxRegistry {
     } catch (error) {
       throw new SbxError(
         `The sandbox registry at ${this.filePath} is not valid JSON: ${error.message}`,
-        'Fix the file, or delete it to start over — the worktrees and containers it lists survive, but sbx will no longer know their names.',
+        'Fix the file, or delete it to start over — the sandboxes and containers it lists survive, but sbx will no longer know their names.',
       );
     }
     if (parsed === null || typeof parsed !== 'object') {

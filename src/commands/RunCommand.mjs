@@ -1,7 +1,7 @@
 import { SbxError } from '../domain/SbxError.mjs';
 
 /**
- * Runs a command inside a sandbox: from its worktree, with its port block
+ * Runs a command inside a sandbox: from its directory, with its port block
  * and credentials in the environment.
  *
  * This is how the project's own dev commands reach a sandbox — they read
@@ -20,7 +20,7 @@ export class RunCommand {
       throw new SbxError('Missing the command to run.', 'Put it after `--`, as in `sbx run sb-1 -- npm run dev`.');
     }
     this.processRunner.runProgram(program, programArguments, {
-      cwd: record.worktree,
+      cwd: record.directory,
       env: this.workspace.environmentFor(record),
     });
   }

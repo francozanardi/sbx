@@ -1,14 +1,21 @@
 ---
 name: sbx-sandboxes
-description: Working with sbx sandboxes — creating, running commands inside one, reseeding, tearing down, and the rules for an agent working in a sandbox worktree. Use when the project has a sandbox.config.mjs, when a directory looks like a sandbox worktree, or when asked to run several agents in parallel on one repository. For setting sbx up on a project that has no manifest yet, use sbx-setup instead.
+description: Working with sbx sandboxes — creating, running commands inside one, reseeding, tearing down, and the rules for an agent working inside one. Use when the project has a sandbox.config.mjs, when a directory looks like a sandbox, or when asked to run several agents in parallel on one repository. For setting sbx up on a project that has no manifest yet, use sbx-setup instead.
 ---
 
 # Working with sbx sandboxes
 
 A sandbox is an independent instance of a repository on this machine: its own
-git worktree and branch, its own block of ports, its own stateful services,
-its own rendered config, and its own seeded data. Slot 0 is the normal
-checkout; sandbox N shifts every port by N × stride.
+git clone, its own block of ports, its own stateful services, its own rendered
+config, and its own seeded data. Slot 0 is the normal checkout; sandbox N
+shifts every port by N × stride.
+
+Because it is a clone rather than a worktree, it owns its refs: it can be on
+any branch, including `main` and including one another sandbox has, and
+ordinary git commands behave normally. Its identity is its name and its slot,
+never its branch — the branch is read live, and changing it is expected.
+Inside a sandbox, `origin` is the project's usual remote and `host` is the
+local checkout it was cloned from.
 
 ## Commands
 
@@ -16,17 +23,17 @@ Run them from anywhere inside the project — the manifest is found by walking
 up from the working directory.
 
 ```bash
-sbx create <name>          # worktree, ports, services, install/migrate/seed
+sbx create <name>          # clone, ports, services, install/migrate/seed
 sbx sync <name>            # re-render env, start services, re-run install/migrate
 sbx list                   # every sandbox, its slot, its service state
 sbx info <name>            # one sandbox and the port each role got
 sbx up <name>              # start its services
 sbx down <name>            # stop them, keeping the data
 sbx seed <name> --reset    # wipe its data and seed again
-sbx run <name> -- <cmd>    # run a command in its worktree and environment
+sbx run <name> -- <cmd>    # run a command in its directory and environment
 sbx env <name>             # its variables as shell exports
-sbx open <name>            # open its worktree in $SBX_EDITOR (default: code)
-sbx delete <name>          # services, volumes, worktree, registry entry
+sbx open <name>            # open its directory in $SBX_EDITOR (default: code)
+sbx delete <name>          # services, volumes, clone, registry entry
 sbx doctor                 # check what would break a create
 ```
 
@@ -39,8 +46,10 @@ merge that adds a dependency or a migration, an edited env template, a
 credential filled in. It repeats only what is safe to repeat, so a sandbox
 keeps its data — seeding stays behind `sbx seed`.
 
-`delete` **keeps the branch** unless given `--delete-branch`. Teardown never
-destroys work.
+`delete` destroys the clone, so it **refuses to run** while the sandbox holds
+commits no remote has or files not committed, and says how to rescue them.
+`--force` overrides. Push, or `git -C <project> fetch <sandbox-dir> <branch>`,
+before deleting anything you want to keep.
 
 ## Rules when working inside a sandbox
 
@@ -52,18 +61,28 @@ destroys work.
 3. **Never edit a port in a config file** to dodge a collision. Fix the
    manifest, or the code that should be reading the port from the environment.
 4. **Commit changes to the manifest and its templates** like any other code.
-   A worktree only sees committed files, so the next sandbox reads them from
-   its own checkout.
-5. **The branch is the deliverable.** Do not push or merge from inside a
-   sandbox unless asked; the human integrates from the main checkout.
+   A sandbox only sees committed files, so the next one reads them from its
+   own clone.
+5. **The branch is the deliverable, and it only exists here.** A sandbox owns
+   its refs, so a commit made inside one is nowhere else until it is pushed or
+   fetched. Do not push or merge unless asked — but say so when work is
+   finished, because the human integrates it with `git fetch` from the main
+   checkout, and deleting the sandbox before that loses it.
 
 ## Ways of working
 
 **Lanes** — a few long-lived sandboxes (`lane-a`, `lane-b`) reused across
-tasks. Between tasks, `git reset --hard <ref>` in the worktree followed by
-`sbx seed <name> --reset` brings one back to a known state. Ports stay stable,
-which matters when one has to be registered somewhere external, like an OAuth
-redirect URI allowlist.
+tasks. This is what sbx is shaped for. Between tasks:
+
+```bash
+git fetch origin
+git switch -c <next-task> origin/main   # or any branch: the clone owns its refs
+sbx sync <name>                         # new dependencies, new migrations
+sbx seed <name> --reset                 # if the task wants clean data
+```
+
+Ports stay stable across all of it, which matters when one has to be
+registered somewhere external, like an OAuth redirect URI allowlist.
 
 Do not resync a lane while an agent is working in it. Rebasing under a running
 agent changes files it did not touch, and it will try to "fix" what it finds.

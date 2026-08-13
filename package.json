@@ -1,10 +1,10 @@
 {
   "name": "@francozanardi/sbx",
   "version": "0.1.0",
-  "description": "Named local sandboxes of a repository: one worktree, one port block, one set of services and seeded data each.",
+  "description": "Named local sandboxes of a repository: one clone, one port block, one set of services and seeded data each.",
   "keywords": [
     "sandbox",
-    "git-worktree",
+    "git-clone",
     "parallel",
     "agents",
     "development-environment",

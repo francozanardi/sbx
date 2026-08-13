@@ -76,9 +76,9 @@ export class ProjectManifest {
     return this.raw.ports.maxSlots ?? DEFAULT_MAX_SLOTS;
   }
 
-  /** Where worktrees are created, or null to fall back to the tool's own default. */
-  worktreeRoot() {
-    return this.raw.worktreeRoot ?? null;
+  /** Where sandbox clones are created, or null to fall back to the tool's own default. */
+  sandboxRoot() {
+    return this.raw.sandboxRoot ?? null;
   }
 
   /** Compose file describing the stateful services, or null when the project needs none. */
@@ -86,7 +86,7 @@ export class ProjectManifest {
     return this.raw.compose ?? null;
   }
 
-  /** Files to render into each worktree, as `{ from, to }` pairs of project-relative paths. */
+  /** Files to render into each sandbox, as `{ from, to }` pairs of project-relative paths. */
   environmentFiles() {
     return this.raw.env ?? [];
   }

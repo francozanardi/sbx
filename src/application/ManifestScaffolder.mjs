@@ -68,7 +68,7 @@ export default {
 
   // Stateful services, one Compose project per sandbox. Ports inside it
   // come from the block above: "\${APP_PORT}:3000". Delete this line if
-  // your project keeps its state in files inside the worktree.
+  // your project keeps its state in files inside the sandbox.
   // compose: 'sandbox/compose.yml',
 
   // Files rendered into each sandbox from a template in the repo.
@@ -79,7 +79,7 @@ export default {
   // Minted once per sandbox and stored with it, never rotated.
   // generate: { SESSION_SECRET: 32 },
 
-  // Shell commands run from the worktree root with the sandbox's
+  // Shell commands run from the sandbox root with the sandbox's
   // variables in the environment. \`create\` runs install, migrate and
   // seed in that order; \`sbx seed --reset\` runs reset then seed.
   hooks: {

@@ -47,7 +47,7 @@ sbx run sb-1 -- pnpm dev
 
 ## B. Python API, MySQL, uv
 
-Same shape, different toolchain. The virtualenv lives inside the worktree; uv's
+Same shape, different toolchain. The virtualenv lives inside the sandbox; uv's
 package cache is global and linked, so the second sandbox installs almost
 instantly.
 
@@ -90,7 +90,7 @@ sbx run sb-1 -- uv run uvicorn app.main:app --port "$API_PORT"
 ## C. Rust service, SQLite, no Docker
 
 No services to declare, so `compose` is absent and `create` skips that step.
-The database is a file inside the worktree: isolation is free and teardown is
+The database is a file inside the sandbox: isolation is free and teardown is
 automatic.
 
 ```js

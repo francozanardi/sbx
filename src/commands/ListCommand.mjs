@@ -12,13 +12,13 @@ export class ListCommand {
       return;
     }
     this.terminal.table(
-      ['name', 'slot', 'branch', 'services', 'worktree'],
+      ['name', 'slot', 'branch', 'services', 'directory'],
       records.map((record) => [
         record.name,
         record.slot,
-        record.branch,
+        this.workspace.branchOf(record) ?? '(detached)',
         this.describeServices(record),
-        record.worktree,
+        record.directory,
       ]),
     );
   }

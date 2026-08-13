@@ -7,7 +7,7 @@ import { SbxError } from '../domain/SbxError.mjs';
  * volumes per project, so isolation between sandboxes costs nothing here
  * and `down --volumes` is a complete teardown.
  *
- * The compose file is read from the sandbox's own worktree, so a branch
+ * The compose file is read from the sandbox's own clone, so a branch
  * that changes the service set takes effect without touching the tool.
  */
 export class ComposeStack {
@@ -64,7 +64,7 @@ export class ComposeStack {
     if (!this.composeFilePath || fs.existsSync(this.composeFilePath)) return;
     throw new SbxError(
       `This sandbox has no compose file at ${this.composeFilePath}.`,
-      'The manifest declares services, but the sandbox\'s worktree does not have that file — it was most likely uncommitted when the sandbox was created. Commit it, then create the sandbox again.',
+      'The manifest declares services, but the sandbox does not have that file — it was most likely uncommitted when the sandbox was created. Commit it, then create the sandbox again.',
     );
   }
 
@@ -85,7 +85,7 @@ export class ComposeStack {
   }
 
   /**
-   * Teardown has to keep working after the worktree holding the compose
+   * Teardown has to keep working after the directory holding the compose
    * file is gone, and Compose can act on an existing project by name alone.
    */
   argumentsFor(composeArguments) {

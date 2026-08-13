@@ -27,7 +27,7 @@ export class SandboxSynchronizer {
 
   writeEnvironmentFiles(record, variables) {
     this.workspace.secrets.ensureExists();
-    const written = this.environmentFileWriter.write(this.workspace.manifest, record.worktree, variables);
+    const written = this.environmentFileWriter.write(this.workspace.manifest, record.directory, variables);
     for (const file of written) this.terminal.step(`rendered ${file}`);
   }
 
@@ -39,7 +39,7 @@ export class SandboxSynchronizer {
 
   runConvergingHooks(record, variables) {
     for (const hookName of ['install', 'migrate']) {
-      this.hookRunner.run(this.workspace.manifest, hookName, record.worktree, variables);
+      this.hookRunner.run(this.workspace.manifest, hookName, record.directory, variables);
     }
   }
 }
