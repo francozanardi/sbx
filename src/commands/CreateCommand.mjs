@@ -13,8 +13,8 @@ export class CreateCommand {
   async execute(argumentList) {
     const name = new SandboxName(argumentList.require(0, 'a sandbox name'));
     const options = {
-      branch: argumentList.flag('branch', name.toString()),
-      startPoint: argumentList.flag('from', this.clones.currentBranch()),
+      branch: argumentList.flag('branch'),
+      startPoint: argumentList.flag('from'),
       runHooks: !argumentList.hasFlag('no-hooks'),
     };
     this.terminal.heading(`Creating sandbox ${name}`);

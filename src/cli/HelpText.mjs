@@ -12,7 +12,7 @@ export class HelpText {
     this.commandEntries = [
       {
         usage: 'sbx create <name> [--branch=<branch>] [--from=<ref>] [--no-hooks]',
-        summary: 'Create a sandbox: clone, port block, services, seeded data.',
+        summary: 'Create a sandbox: clone, port block, services, seeded data. Default: fetch origin and check out its default branch. --branch creates a local branch of that name. --from picks a starting ref.',
       },
       {
         usage: 'sbx sync <name> [--no-hooks]',

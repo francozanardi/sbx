@@ -25,15 +25,129 @@ export class GitClones {
   }
 
   /**
-   * Clones the project into `destinationPath` and leaves it on a branch
-   * called `branch`, starting at `startPoint` as that revision resolves in
-   * the project's own repository.
+   * Clones the project into `destinationPath` and positions its working
+   * tree.
+   *
+   * The default lane-first behaviour is: fetch `origin`, then check out
+   * whatever branch `origin` calls default (usually `main`), tracking it.
+   * No local branch is invented on the sandbox's behalf. The sandbox lands
+   * on the same starting point a fresh clone of the remote would land on.
+   *
+   * `startPoint` overrides the ref used, and skips no step: origin is still
+   * fetched so that a `--from=origin/…` ref is current. `branch` asks for a
+   * local branch of that name to be created at the chosen point, which is
+   * what the per-task use of a sandbox usually wants.
    */
-  create(destinationPath, branch, startPoint) {
-    const commit = this.resolve(startPoint);
+  create(destinationPath, { branch = null, startPoint = null } = {}) {
     this.processRunner.runProgram('git', ['clone', '--quiet', this.repositoryDirectory, destinationPath]);
     this.nameRemotes(destinationPath);
-    this.processRunner.runProgram('git', ['checkout', '--quiet', '-B', branch, commit], { cwd: destinationPath });
+
+    const hasOrigin = this.hasRemote(destinationPath, 'origin');
+    if (hasOrigin) {
+      this.updateOriginRefs(destinationPath);
+    }
+
+    const ref = startPoint ?? this.defaultStartPoint(destinationPath, hasOrigin);
+    const commit = this.resolveIn(destinationPath, ref);
+    if (!commit) {
+      throw new SbxError(
+        `"${ref}" does not name a commit in this sandbox.`,
+        'Pass --from=<ref> with a branch, tag or commit git can resolve.',
+      );
+    }
+
+    if (branch) {
+      this.processRunner.runProgram('git', ['checkout', '--quiet', '-B', branch, commit], { cwd: destinationPath });
+    } else {
+      this.checkoutRef(destinationPath, ref, commit);
+    }
+  }
+
+  /**
+   * Fetches from `origin` and sets `origin/HEAD` to whatever the remote
+   * calls default. Both steps are best-effort: an offline machine, a remote
+   * that refuses the fetch, or a remote with no `HEAD` should not fail the
+   * whole create. The sandbox still ends up on something reasonable.
+   *
+   * `captureProgram` is used for `set-head` because the command has no
+   * `--quiet` in older git and prints an informational line either way.
+   */
+  updateOriginRefs(destinationPath) {
+    try {
+      this.processRunner.runProgram('git', ['fetch', '--quiet', 'origin'], { cwd: destinationPath });
+    } catch {
+      return;
+    }
+    try {
+      this.processRunner.captureProgram('git', ['remote', 'set-head', 'origin', '--auto'], { cwd: destinationPath });
+    } catch {}
+  }
+
+  defaultStartPoint(destinationPath, hasOrigin) {
+    if (hasOrigin && this.hasRef(destinationPath, 'refs/remotes/origin/HEAD')) {
+      return 'origin/HEAD';
+    }
+    return this.currentBranch() ?? 'HEAD';
+  }
+
+  /**
+   * Checks out `ref` in a way that matches what a fresh `git clone` would
+   * do: `origin/main` becomes a local `main` tracking it, a local branch
+   * checks itself out, anything else lands detached.
+   */
+  checkoutRef(destinationPath, ref, commit) {
+    const remoteMatch = ref.match(/^origin\/(.+)$/);
+    if (remoteMatch) {
+      const branchName = remoteMatch[1] === 'HEAD' ? this.resolveOriginHead(destinationPath) : remoteMatch[1];
+      if (branchName) {
+        this.processRunner.runProgram(
+          'git',
+          ['checkout', '--quiet', '-B', branchName, '--track', `origin/${branchName}`],
+          { cwd: destinationPath },
+        );
+        return;
+      }
+    }
+    if (this.isLocalBranch(destinationPath, ref)) {
+      this.processRunner.runProgram('git', ['checkout', '--quiet', ref], { cwd: destinationPath });
+      return;
+    }
+    this.processRunner.runProgram('git', ['checkout', '--quiet', '--detach', commit], { cwd: destinationPath });
+  }
+
+  resolveOriginHead(destinationPath) {
+    try {
+      const ref = this.processRunner.captureProgram(
+        'git',
+        ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'],
+        { cwd: destinationPath },
+      );
+      return ref.replace(/^origin\//, '');
+    } catch {
+      return null;
+    }
+  }
+
+  hasRemote(directory, name) {
+    try {
+      this.processRunner.captureProgram('git', ['remote', 'get-url', name], { cwd: directory });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  hasRef(directory, ref) {
+    try {
+      this.processRunner.captureProgram('git', ['show-ref', '--verify', '--quiet', ref], { cwd: directory });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  isLocalBranch(directory, ref) {
+    return this.hasRef(directory, `refs/heads/${ref}`);
   }
 
   /**
@@ -60,17 +174,6 @@ export class GitClones {
     } catch {
       return null;
     }
-  }
-
-  resolve(revision) {
-    const commit = this.resolveIn(this.repositoryDirectory, revision);
-    if (!commit) {
-      throw new SbxError(
-        `"${revision}" does not name a commit in this repository.`,
-        'Pass --from=<ref> with a branch, tag or commit that exists here.',
-      );
-    }
-    return commit;
   }
 
   remove(destinationPath) {

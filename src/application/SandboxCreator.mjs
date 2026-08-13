@@ -33,7 +33,7 @@ export class SandboxCreator {
     const slot = this.allocateSlot();
     await this.rejectBusyPorts(slot, name);
 
-    const record = this.provisionClone(name, slot, branch, startPoint);
+    const record = this.provisionClone(name, slot, { branch, startPoint });
     const variables = this.synchronizer.sync(record, { runHooks });
     if (runHooks) this.seed(record, variables);
 
@@ -80,15 +80,19 @@ export class SandboxCreator {
   /**
    * The branch name is not checked against the project's branches: a
    * sandbox owns its refs, so a name already taken elsewhere is free here.
+   *
+   * `branch` and `startPoint` are both optional. Their defaults live in
+   * GitClones so that the same rule (fetch origin, take its default branch)
+   * governs every path that produces a clone.
    */
-  provisionClone(name, slot, branch, startPoint) {
+  provisionClone(name, slot, { branch, startPoint }) {
     const directory = this.workspace.sandboxPathFor(name);
     if (fs.existsSync(directory)) {
       throw new SbxError(`${directory} already exists.`, 'Remove it, or pick another sandbox name.');
     }
     fs.mkdirSync(this.workspace.sandboxRoot(), { recursive: true });
-    this.terminal.step(`clone ${directory} on ${branch} from ${startPoint}`);
-    this.clones.create(directory, branch, startPoint);
+    this.terminal.step(`clone ${directory}`);
+    this.clones.create(directory, { branch, startPoint });
 
     const record = new SandboxRecord({
       name,
