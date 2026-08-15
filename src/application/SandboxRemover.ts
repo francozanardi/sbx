@@ -3,6 +3,7 @@ import { type Terminal } from '@/cli/Terminal.js';
 import { SbxError } from '@/domain/SbxError.js';
 import { type SandboxRecord } from '@/domain/SandboxRecord.js';
 import { type GitClones, type UnsavedBranch } from '@/infrastructure/GitClones.js';
+import { type EnvMap } from '@/infrastructure/ProcessRunner.js';
 import { type ProjectWorkspace } from '@/application/ProjectWorkspace.js';
 
 export interface SandboxRemoverDeps {
@@ -42,6 +43,24 @@ export class SandboxRemover {
     this.removeDirectory(record);
     this.clones.unregisterHostRemote(`sbx-${record.name}`);
     this.workspace.registry.remove(record.name);
+  }
+
+  /**
+   * Docker Compose finds containers by project name, so tearing them down
+   * does not need the sandbox's environment variables to be resolvable.
+   * When the manifest is broken in a way that stops the env from being
+   * built (a bad `ports.env` entry, for example), we still call compose
+   * with an empty override so the teardown itself is not held hostage to
+   * an unrelated config problem.
+   */
+  private buildEnvironmentForTeardown(record: SandboxRecord): EnvMap {
+    try {
+      return this.workspace.environmentFor(record);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.terminal.warn(`Sandbox variables could not be resolved (${message}); tearing services down with no overrides — compose finds them by project name.`);
+      return {};
+    }
   }
 
   private rejectUnsavedWork(record: SandboxRecord): void {
@@ -86,11 +105,26 @@ export class SandboxRemover {
     return `${paths.slice(0, 3).join(', ')} and ${String(paths.length - 3)} more`;
   }
 
+  /**
+   * Services that outlive their sandbox are the worst kind of leak: the
+   * registry no longer points to them, so sbx cannot find them for
+   * another try. This step therefore fails loudly rather than best-effort
+   * — a compose error stops the delete before the registry entry goes,
+   * so the next `sbx delete` (once the reason is fixed) starts over from
+   * the same known state.
+   */
   private destroyServices(record: SandboxRecord): void {
     if (!this.workspace.manifest.composeFile()) return;
-    this.attempt('remove services and volumes', () => {
-      this.workspace.composeStackFor(record).destroy(this.workspace.environmentFor(record));
-    });
+    this.terminal.step('remove services and volumes');
+    try {
+      this.workspace.composeStackFor(record).destroy(this.buildEnvironmentForTeardown(record));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new SbxError(
+        `Could not remove services and volumes for "${record.name}": ${message}`,
+        `The sandbox is still registered so you can try again. To tear the containers down by hand: docker compose --project-name ${this.workspace.manifest.name()}-${record.name} down --volumes --remove-orphans`,
+      );
+    }
   }
 
   private removeDirectory(record: SandboxRecord): void {
