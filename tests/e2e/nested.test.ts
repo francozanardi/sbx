@@ -37,10 +37,14 @@ describe('sbx run from inside a sandbox', () => {
     expect(remotes(fixture.sandboxPath('lane-a'))).not.toContain('sbx-lane-b');
   });
 
-  it('refuses to delete a sandbox', () => {
-    const result = fixture.sbxIn(fixture.sandboxPath('lane-a'), 'delete', 'lane-a', '--force');
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain("not the project's host checkout");
+  it('deletes another sandbox from inside a sibling', () => {
+    // Per-sandbox commands are addressable from anywhere; running one from
+    // inside sibling `lane-a` resolves the target through `~/.sbx` and acts
+    // on the host regardless of which clone happens to be the cwd.
+    expect(fixture.sbx('create', 'lane-b').status).toBe(0);
+    const result = fixture.sbxIn(fixture.sandboxPath('lane-a'), 'delete', 'lane-b', '--force');
+    expect(result.status).toBe(0);
+    expect(remotes(fixture.projectDir)).not.toContain('sbx-lane-b');
   });
 
   it('fails doctor, which would otherwise report on the wrong checkout', () => {

@@ -1,12 +1,11 @@
-import { type ProjectWorkspace } from '@/application/ProjectWorkspace.js';
+import { type SandboxResolver } from '@/application/SandboxResolver.js';
 import { type ArgumentList } from '@/cli/ArgumentList.js';
 import { type Command } from '@/cli/CommandRouter.js';
-import { type SandboxReporter } from '@/cli/SandboxReporter.js';
+import { SandboxReporter } from '@/cli/SandboxReporter.js';
 import { type Terminal } from '@/cli/Terminal.js';
 
 export interface UpCommandDeps {
-  workspace: ProjectWorkspace;
-  reporter: SandboxReporter;
+  resolver: SandboxResolver;
   terminal: Terminal;
 }
 
@@ -14,25 +13,24 @@ export interface UpCommandDeps {
 export class UpCommand implements Command {
   readonly flags = [] as const;
 
-  private readonly workspace: ProjectWorkspace;
-  private readonly reporter: SandboxReporter;
+  private readonly resolver: SandboxResolver;
   private readonly terminal: Terminal;
 
-  constructor({ workspace, reporter, terminal }: UpCommandDeps) {
-    this.workspace = workspace;
-    this.reporter = reporter;
+  constructor({ resolver, terminal }: UpCommandDeps) {
+    this.resolver = resolver;
     this.terminal = terminal;
   }
 
   execute(argumentList: ArgumentList): void {
-    const record = this.workspace.requireSandbox(argumentList.require(0, 'a sandbox name'));
-    if (!this.workspace.manifest.composeFile()) {
+    const spec = argumentList.require(0, 'a sandbox name');
+    const { workspace, record } = this.resolver.resolve(spec);
+    if (!workspace.manifest.composeFile()) {
       this.terminal.info('This project declares no services. Nothing to start.');
       return;
     }
     this.terminal.heading(`Starting services for ${record.name}`);
-    this.workspace.composeStackFor(record).start(this.workspace.environmentFor(record));
+    workspace.composeStackFor(record).start(workspace.environmentFor(record));
     this.terminal.blank();
-    this.reporter.describe(record);
+    new SandboxReporter(workspace, this.terminal).describe(record);
   }
 }

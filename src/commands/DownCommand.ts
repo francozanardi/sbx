@@ -1,10 +1,10 @@
-import { type ProjectWorkspace } from '@/application/ProjectWorkspace.js';
+import { type SandboxResolver } from '@/application/SandboxResolver.js';
 import { type ArgumentList } from '@/cli/ArgumentList.js';
 import { type Command } from '@/cli/CommandRouter.js';
 import { type Terminal } from '@/cli/Terminal.js';
 
 export interface DownCommandDeps {
-  workspace: ProjectWorkspace;
+  resolver: SandboxResolver;
   terminal: Terminal;
 }
 
@@ -12,21 +12,22 @@ export interface DownCommandDeps {
 export class DownCommand implements Command {
   readonly flags = [] as const;
 
-  private readonly workspace: ProjectWorkspace;
+  private readonly resolver: SandboxResolver;
   private readonly terminal: Terminal;
 
-  constructor({ workspace, terminal }: DownCommandDeps) {
-    this.workspace = workspace;
+  constructor({ resolver, terminal }: DownCommandDeps) {
+    this.resolver = resolver;
     this.terminal = terminal;
   }
 
   execute(argumentList: ArgumentList): void {
-    const record = this.workspace.requireSandbox(argumentList.require(0, 'a sandbox name'));
-    if (!this.workspace.manifest.composeFile()) {
+    const spec = argumentList.require(0, 'a sandbox name');
+    const { workspace, record } = this.resolver.resolve(spec);
+    if (!workspace.manifest.composeFile()) {
       this.terminal.info('This project declares no services. Nothing to stop.');
       return;
     }
     this.terminal.heading(`Stopping services for ${record.name}`);
-    this.workspace.composeStackFor(record).stop(this.workspace.environmentFor(record));
+    workspace.composeStackFor(record).stop(workspace.environmentFor(record));
   }
 }

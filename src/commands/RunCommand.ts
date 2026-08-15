@@ -1,11 +1,11 @@
-import { type ProjectWorkspace } from '@/application/ProjectWorkspace.js';
+import { type SandboxResolver } from '@/application/SandboxResolver.js';
 import { type ArgumentList } from '@/cli/ArgumentList.js';
 import { type Command } from '@/cli/CommandRouter.js';
 import { SbxError } from '@/domain/SbxError.js';
 import { type ProcessRunner } from '@/infrastructure/ProcessRunner.js';
 
 export interface RunCommandDeps {
-  workspace: ProjectWorkspace;
+  resolver: SandboxResolver;
   processRunner: ProcessRunner;
 }
 
@@ -21,23 +21,24 @@ export interface RunCommandDeps {
 export class RunCommand implements Command {
   readonly flags = [] as const;
 
-  private readonly workspace: ProjectWorkspace;
+  private readonly resolver: SandboxResolver;
   private readonly processRunner: ProcessRunner;
 
-  constructor({ workspace, processRunner }: RunCommandDeps) {
-    this.workspace = workspace;
+  constructor({ resolver, processRunner }: RunCommandDeps) {
+    this.resolver = resolver;
     this.processRunner = processRunner;
   }
 
   execute(argumentList: ArgumentList): void {
-    const record = this.workspace.requireSandbox(argumentList.require(0, 'a sandbox name'));
+    const spec = argumentList.require(0, 'a sandbox name');
+    const { workspace, record } = this.resolver.resolve(spec);
     const [program, ...programArguments] = argumentList.passthrough;
     if (!program) {
       throw new SbxError('Missing the command to run.', 'Put it after `--`, as in `sbx run sb-1 -- npm run dev`.');
     }
     process.exitCode = this.processRunner.forwardProgram(program, programArguments, {
       cwd: record.directory,
-      env: this.workspace.environmentFor(record),
+      env: workspace.environmentFor(record),
     });
   }
 }

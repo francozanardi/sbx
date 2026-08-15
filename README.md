@@ -105,7 +105,8 @@ other command works from anywhere, including from inside a copy.
 | `sbx open <name>` | Interactive subshell inside the copy: its directory as cwd, its env loaded |
 | `sbx code <name>` | Open the copy in `$SBX_EDITOR` (default `code`). No env is injected |
 | `sbx run <name> -- <cmd>` | Run a single command inside the copy. Its output and its exit code are yours |
-| `sbx list` | Every copy and whether its services are up |
+| `sbx list` | Every copy of this project and whether its services are up |
+| `sbx list --all` | Every copy of every project on this machine. Runs from any directory |
 | `sbx info <name>` | Where it lives and which ports it got |
 | `sbx up <name>` / `sbx down <name>` | Start or stop its services |
 | `sbx delete <name>` | Remove it. Refuses while it holds unpushed or uncommitted work |

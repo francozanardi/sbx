@@ -32,7 +32,7 @@ describe('sbx flag handling', () => {
   });
 
   it('refuses a flag on a command that takes none', () => {
-    const result = fixture.sbx('list', '--verbose');
+    const result = fixture.sbx('info', '--verbose');
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('It takes no flags');
   });

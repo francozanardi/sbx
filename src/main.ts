@@ -20,18 +20,26 @@ const helpText = new HelpText(terminal);
 
 try {
   const standalone = registry.standalone();
-  let commands = standalone;
   const first = tokens[0];
-  if (!first || !standalone.has(first)) {
+  let commands = standalone;
+  // `init` is the one command that must not touch a parent's manifest —
+  // it exists to write a fresh one, and a broken manifest three directories
+  // up should not stop it. Everything else goes through the loader, and
+  // falls back to the standalone map (with `list --all` and `init`) if the
+  // loader fails.
+  if (first !== 'init') {
     try {
       commands = registry.forProject(new ManifestLoader().loadFrom(process.cwd()));
     } catch (error) {
-      // Asking for help in a directory with no manifest is how someone
-      // finds out `sbx init` exists, so it must not be a hard failure.
-      if (!HELP_TOKENS.has(first ?? 'help')) throw error;
-      const message = error instanceof Error ? error.message : String(error);
-      terminal.warn(message);
-      terminal.blank();
+      const key = first ?? 'help';
+      const availableInFallback = standalone.has(key);
+      const isHelp = HELP_TOKENS.has(key);
+      if (!availableInFallback && !isHelp) throw error;
+      if (isHelp) {
+        const message = error instanceof Error ? error.message : String(error);
+        terminal.warn(message);
+        terminal.blank();
+      }
     }
   }
   await new CommandRouter(commands, helpText).route(tokens, new ArgumentList(tokens.slice(1)));

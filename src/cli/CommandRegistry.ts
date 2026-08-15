@@ -4,7 +4,7 @@ import { ManifestScaffolder } from '@/application/ManifestScaffolder.js';
 import { ProjectWorkspace } from '@/application/ProjectWorkspace.js';
 import { SandboxCreator } from '@/application/SandboxCreator.js';
 import { SandboxRebuilder } from '@/application/SandboxRebuilder.js';
-import { SandboxRemover } from '@/application/SandboxRemover.js';
+import { SandboxResolver } from '@/application/SandboxResolver.js';
 import { SetupInspector } from '@/application/SetupInspector.js';
 import { CodeCommand } from '@/commands/CodeCommand.js';
 import { CreateCommand } from '@/commands/CreateCommand.js';
@@ -40,36 +40,58 @@ export interface CommandRegistryDeps {
 /**
  * Builds the commands and everything they depend on.
  *
- * The split is between commands that need a project manifest and the one
- * that exists to create it: `init` has to work in a directory that has no
- * manifest yet, which is the only reason it is separated.
+ * Two kinds of command exist:
+ *
+ * - Per-sandbox operations (`info`, `up`, `down`, `run`, `open`, `code`,
+ *   `delete`) address a specific sandbox by name and can run from any
+ *   directory: they resolve the sandbox through `SandboxResolver`, which
+ *   scans `~/.sbx`, and build their workspace from the resolved
+ *   sandbox's host project. They are wired identically whether or not
+ *   the tool was invoked inside a project; the only difference is the
+ *   `preferredProject` the resolver uses to break bare-name ties.
+ *
+ * - Project-scoped operations (`create`, `rebuild`, `doctor`) act on the
+ *   host checkout itself, so they only exist in `forProject`.
  */
 export class CommandRegistry {
   private readonly terminal: Terminal;
   private readonly processRunner: ProcessRunner;
   private readonly homePath: HomePath;
+  private readonly dockerAvailability: DockerAvailability;
 
   constructor({ terminal, processRunner, homePath }: CommandRegistryDeps) {
     this.terminal = terminal;
     this.processRunner = processRunner;
     this.homePath = homePath;
+    this.dockerAvailability = new DockerAvailability(processRunner);
   }
 
-  /** Commands that work in any directory. */
+  /**
+   * Commands that work in any directory, with no project context. Used
+   * when no manifest was found or when the manifest failed to load — the
+   * per-sandbox operations reach the target through `~/.sbx` regardless
+   * of where sbx was invoked from.
+   */
   standalone(): Map<string, Command> {
-    return new Map<string, Command>([['init', this.buildInit()]]);
+    const resolver = new SandboxResolver(this.homePath, this.processRunner, this.dockerAvailability, null);
+    // preferredWorkspace is null: bare-name lookups have no local project to prefer, and every resolution is global.
+    return new Map<string, Command>([
+      ['init', this.buildInit()],
+      ['list', new ListCommand({ workspace: null, homePath: this.homePath, terminal: this.terminal })],
+      ...this.perSandboxCommands(resolver),
+    ]);
   }
 
   /** Every command, wired against one project. */
   forProject(manifest: ProjectManifest): Map<string, Command> {
-    const dockerAvailability = new DockerAvailability(this.processRunner);
     const clones = new GitClones(this.processRunner, manifest.rootDirectory);
-    const workspace = new ProjectWorkspace(manifest, this.homePath, this.processRunner, dockerAvailability, clones);
+    const workspace = new ProjectWorkspace(manifest, this.homePath, this.processRunner, this.dockerAvailability, clones);
     const hookRunner = new HookRunner(this.processRunner, this.terminal);
     const reporter = new SandboxReporter(workspace, this.terminal);
     const portProbe = new PortProbe();
     const secretGenerator = new SecretGenerator();
     const templateRenderer = new TemplateRenderer();
+    const resolver = new SandboxResolver(this.homePath, this.processRunner, this.dockerAvailability, workspace);
 
     const rebuilder = new SandboxRebuilder({
       workspace,
@@ -85,30 +107,35 @@ export class CommandRegistry {
       portProbe,
       terminal: this.terminal,
     });
-    const remover = new SandboxRemover({ workspace, clones, terminal: this.terminal });
     const inspector = new SetupInspector({
       workspace,
       clones,
       portProbe,
       secretGenerator,
       templateRenderer,
-      dockerAvailability,
+      dockerAvailability: this.dockerAvailability,
     });
 
     return new Map<string, Command>([
       ['create', new CreateCommand({ workspace, creator, clones, reporter, terminal: this.terminal })],
       ['rebuild', new RebuildCommand({ workspace, rebuilder, reporter, terminal: this.terminal })],
-      ['list', new ListCommand({ workspace, terminal: this.terminal })],
-      ['info', new InfoCommand({ workspace, reporter })],
-      ['up', new UpCommand({ workspace, reporter, terminal: this.terminal })],
-      ['down', new DownCommand({ workspace, terminal: this.terminal })],
-      ['run', new RunCommand({ workspace, processRunner: this.processRunner })],
-      ['open', new OpenCommand({ workspace, processRunner: this.processRunner, terminal: this.terminal })],
-      ['code', new CodeCommand({ workspace, processRunner: this.processRunner })],
-      ['delete', new DeleteCommand({ workspace, remover, terminal: this.terminal })],
+      ['list', new ListCommand({ workspace, homePath: this.homePath, terminal: this.terminal })],
       ['doctor', new DoctorCommand({ inspector, terminal: this.terminal })],
       ['init', this.buildInit()],
+      ...this.perSandboxCommands(resolver),
     ]);
+  }
+
+  private perSandboxCommands(resolver: SandboxResolver): [string, Command][] {
+    return [
+      ['info', new InfoCommand({ resolver, terminal: this.terminal })],
+      ['up', new UpCommand({ resolver, terminal: this.terminal })],
+      ['down', new DownCommand({ resolver, terminal: this.terminal })],
+      ['run', new RunCommand({ resolver, processRunner: this.processRunner })],
+      ['open', new OpenCommand({ resolver, processRunner: this.processRunner, terminal: this.terminal })],
+      ['code', new CodeCommand({ resolver, processRunner: this.processRunner })],
+      ['delete', new DeleteCommand({ resolver, terminal: this.terminal })],
+    ];
   }
 
   private buildInit(): Command {

@@ -24,25 +24,28 @@ export class HelpText {
         usage: 'sbx rebuild <name> [--data | --hard] [--no-hooks]',
         summary: 'Bring an existing sandbox in line with the current project. Default: install and migrate. With --data: also reset and seed, replacing the seeded data. With --hard: also destroy services and volumes first, for cases where the database has to be rebuilt (a branch that removes a migration, drifted state).',
       },
-      { usage: 'sbx list', summary: 'List the sandboxes of this project.' },
-      { usage: 'sbx info <name>', summary: 'Show a sandbox and its port block.' },
-      { usage: 'sbx up <name>', summary: "Start a sandbox's services." },
-      { usage: 'sbx down <name>', summary: "Stop a sandbox's services, keeping its data." },
       {
-        usage: 'sbx run <name> -- <command> [args...]',
+        usage: 'sbx list [--all]',
+        summary: "List this project's sandboxes. With --all: every project's sandboxes on this machine, drawn from ~/.sbx. Runs from any directory when --all is given.",
+      },
+      { usage: 'sbx info <sandbox>', summary: 'Show a sandbox and its port block.' },
+      { usage: 'sbx up <sandbox>', summary: "Start a sandbox's services." },
+      { usage: 'sbx down <sandbox>', summary: "Stop a sandbox's services, keeping its data." },
+      {
+        usage: 'sbx run <sandbox> -- <command> [args...]',
         summary: "Run a command in a sandbox's directory and environment. Its output and exit status pass through unchanged.",
       },
       {
-        usage: 'sbx open <name>',
+        usage: 'sbx open <sandbox>',
         summary: "Start an interactive subshell in a sandbox: its directory as cwd, its variables in the environment. Type `exit` to leave.",
       },
       {
-        usage: 'sbx code <name>   (editor from $SBX_EDITOR, default `code`)',
+        usage: 'sbx code <sandbox>   (editor from $SBX_EDITOR, default `code`)',
         summary: "Open a sandbox's directory in your editor. Env vars are not injected; run `sbx open` inside a terminal to load them.",
       },
       {
-        usage: 'sbx delete <name> [--force]',
-        summary: 'Delete a sandbox: services, volumes, clone, host remote, registry entry. Refuses while it holds unsaved work. Run it from the host checkout.',
+        usage: 'sbx delete <sandbox> [--force]',
+        summary: 'Delete a sandbox: services, volumes, clone, host remote, registry entry. Refuses while it holds unsaved work.',
       },
       { usage: 'sbx doctor', summary: 'Check this project for anything that would break `sbx create`.' },
       { usage: 'sbx init', summary: 'Write a starting sandbox.config.json into this project.' },
@@ -85,6 +88,9 @@ export class HelpText {
       this.terminal.detail(`    ${entry.summary}`);
       this.terminal.blank();
     }
+    this.terminal.detail('  <sandbox> is `<name>` or `<project>/<name>`. Bare names resolve to the current project;');
+    this.terminal.detail('  the qualified form works from any directory and disambiguates when the name is shared.');
+    this.terminal.blank();
   }
 
   private printEnvironment(): void {
