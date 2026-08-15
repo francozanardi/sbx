@@ -77,6 +77,66 @@ export class SandboxResolver {
     this.preferredProject = preferredWorkspace ? preferredWorkspace.manifest.name() : null;
   }
 
+  /**
+   * The sandbox named by `spec`, or — when no name was given — the one
+   * whose clone contains `directory`.
+   *
+   * Standing in a sandbox is as good as naming it: every per-sandbox
+   * command reads the same way with the name left off, which is what
+   * makes `sbx code` or `sbx run -- npm test` usable once you are
+   * already inside one.
+   */
+  resolveOrEnclosing(
+    spec: string | null,
+    options: ResolveOptions = {},
+    directory: string = process.cwd(),
+  ): ResolvedSandbox {
+    if (spec !== null) return this.resolve(spec, options);
+    const enclosing = this.enclosing(directory);
+    if (!enclosing) {
+      throw new SbxError(
+        'Missing a sandbox name, and this directory is not inside a sandbox.',
+        'Name one, or run this from a sandbox directory to mean that one. `sbx list --all` shows every sandbox on this machine.',
+      );
+    }
+    if (options.requireClone !== false) this.rejectMissingClone(enclosing);
+    return enclosing;
+  }
+
+  /**
+   * The sandbox whose clone contains `directory`, or null when it is not
+   * inside one.
+   *
+   * Matched by path containment across every project's registry rather
+   * than through a loaded manifest, so it answers from any subdirectory
+   * of a sandbox and keeps answering when that sandbox's manifest is
+   * too broken to parse. The longest match wins, so a sandbox nested
+   * inside another's tree resolves to itself.
+   */
+  enclosing(directory: string = process.cwd()): ResolvedSandbox | null {
+    const resolved = path.resolve(directory);
+    let best: Candidate | null = null;
+    for (const projectName of this.homePath.knownProjectNames()) {
+      let records: SandboxRecord[];
+      try {
+        records = this.registryFor(projectName).list();
+      } catch {
+        continue;
+      }
+      for (const record of records) {
+        if (!this.contains(record.directory, resolved)) continue;
+        if (best && best.record.directory.length >= record.directory.length) continue;
+        best = { projectName, record };
+      }
+    }
+    return best ? this.buildResolved(best) : null;
+  }
+
+  private contains(cloneDirectory: string, candidate: string): boolean {
+    const clone = path.resolve(cloneDirectory);
+    return candidate === clone || candidate.startsWith(clone + path.sep);
+  }
+
   resolve(spec: string, options: ResolveOptions = {}): ResolvedSandbox {
     const parsed = this.parseSpec(spec);
     const candidates = this.findCandidates(parsed.project, parsed.name);

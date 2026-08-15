@@ -26,8 +26,7 @@ export class CodeCommand implements Command {
   }
 
   execute(argumentList: ArgumentList): void {
-    const spec = argumentList.require(0, 'a sandbox name');
-    const { record } = this.resolver.resolve(spec);
+    const { record } = this.resolver.resolveOrEnclosing(argumentList.at(0));
     const editor = process.env.SBX_EDITOR ?? 'code';
     this.processRunner.runProgram(editor, [record.directory]);
   }

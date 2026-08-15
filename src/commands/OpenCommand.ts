@@ -38,8 +38,7 @@ export class OpenCommand implements Command {
   }
 
   execute(argumentList: ArgumentList): void {
-    const spec = argumentList.require(0, 'a sandbox name');
-    const { workspace, record } = this.resolver.resolve(spec);
+    const { workspace, record } = this.resolver.resolveOrEnclosing(argumentList.at(0));
     const shell = process.env.SHELL ?? '/bin/bash';
     this.terminal.info(`Entering ${record.name}. Type \`exit\` to leave.`);
     const env = this.buildEnvOrWarn(() => workspace.environmentFor(record));

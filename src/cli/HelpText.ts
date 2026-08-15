@@ -28,19 +28,19 @@ export class HelpText {
         usage: 'sbx list [--all]',
         summary: "List this project's sandboxes. With --all: every project's sandboxes on this machine, drawn from ~/.sbx. Runs from any directory when --all is given.",
       },
-      { usage: 'sbx info <sandbox>', summary: 'Show a sandbox and its port block.' },
-      { usage: 'sbx up <sandbox>', summary: "Start a sandbox's services." },
-      { usage: 'sbx down <sandbox>', summary: "Stop a sandbox's services, keeping its data." },
+      { usage: 'sbx info [sandbox]', summary: 'Show a sandbox and its port block.' },
+      { usage: 'sbx up [sandbox]', summary: "Start a sandbox's services." },
+      { usage: 'sbx down [sandbox]', summary: "Stop a sandbox's services, keeping its data." },
       {
-        usage: 'sbx run <sandbox> -- <command> [args...]',
+        usage: 'sbx run [sandbox] -- <command> [args...]',
         summary: "Run a command in a sandbox's directory and environment. Its output and exit status pass through unchanged.",
       },
       {
-        usage: 'sbx open <sandbox>',
+        usage: 'sbx open [sandbox]',
         summary: "Start an interactive subshell in a sandbox: its directory as cwd, its variables in the environment. Type `exit` to leave.",
       },
       {
-        usage: 'sbx code <sandbox>   (editor from $SBX_EDITOR, default `code`)',
+        usage: 'sbx code [sandbox]   (editor from $SBX_EDITOR, default `code`)',
         summary: "Open a sandbox's directory in your editor. Env vars are not injected; run `sbx open` inside a terminal to load them.",
       },
       {
@@ -90,6 +90,8 @@ export class HelpText {
     }
     this.terminal.detail('  <sandbox> is `<name>` or `<project>/<name>`. Bare names resolve to the current project;');
     this.terminal.detail('  the qualified form works from any directory and disambiguates when the name is shared.');
+    this.terminal.detail('  Where it is shown as [sandbox] it can be left off entirely inside a sandbox directory,');
+    this.terminal.detail('  which then means that one. `delete` is excluded: it would remove the directory you are in.');
     this.terminal.blank();
   }
 

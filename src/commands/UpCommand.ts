@@ -22,8 +22,7 @@ export class UpCommand implements Command {
   }
 
   execute(argumentList: ArgumentList): void {
-    const spec = argumentList.require(0, 'a sandbox name');
-    const { workspace, record } = this.resolver.resolve(spec);
+    const { workspace, record } = this.resolver.resolveOrEnclosing(argumentList.at(0));
     if (!workspace.manifest.composeFile()) {
       this.terminal.info('This project declares no services. Nothing to start.');
       return;

@@ -22,8 +22,7 @@ export class InfoCommand implements Command {
   }
 
   execute(argumentList: ArgumentList): void {
-    const spec = argumentList.require(0, 'a sandbox name');
-    const { workspace, record } = this.resolver.resolve(spec);
+    const { workspace, record } = this.resolver.resolveOrEnclosing(argumentList.at(0));
     new SandboxReporter(workspace, this.terminal).describe(record);
   }
 }

@@ -30,8 +30,7 @@ export class RunCommand implements Command {
   }
 
   execute(argumentList: ArgumentList): void {
-    const spec = argumentList.require(0, 'a sandbox name');
-    const { workspace, record } = this.resolver.resolve(spec);
+    const { workspace, record } = this.resolver.resolveOrEnclosing(argumentList.at(0));
     const [program, ...programArguments] = argumentList.passthrough;
     if (!program) {
       throw new SbxError('Missing the command to run.', 'Put it after `--`, as in `sbx run sb-1 -- npm run dev`.');
