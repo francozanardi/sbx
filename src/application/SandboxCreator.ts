@@ -35,9 +35,11 @@ export interface CreateOptions {
  * the rebuilder so the same code that later re-converges a sandbox is
  * the one that converges it the first time.
  *
- * The registry entry is written as soon as the clone exists, so a run
- * that fails halfway still leaves something the delete command can clean
- * up.
+ * Anything a manifest lookup can throw from — the port block, the
+ * generated secrets — is read *before* the clone, so a broken manifest
+ * fails without touching disk. Once the clone lands the registry entry
+ * is written straight away, so a rebuild that fails halfway still
+ * leaves an entry `sbx delete` can clean up.
  */
 export class SandboxCreator {
   private readonly workspace: ProjectWorkspace;
@@ -63,7 +65,14 @@ export class SandboxCreator {
     const slot = this.allocateSlot();
     await this.rejectBusyPorts(slot, name);
 
-    const record = this.provisionClone(name, slot, { branch, startPoint });
+    // Read everything the manifest can reject on before touching the
+    // filesystem. Deferring these to after the clone is what let a
+    // broken `ports.env` strand a directory the registry could not
+    // then reach.
+    const ports = this.workspace.portBlockFor(slot).resolve();
+    const generatedSecrets = this.mintSecrets();
+
+    const record = this.provisionClone(name, slot, { branch, startPoint }, ports, generatedSecrets);
     this.rebuilder.rebuild(record, { runHooks, mode: 'populate' });
 
     return record;
@@ -108,10 +117,15 @@ export class SandboxCreator {
     name: string,
     slot: number,
     { branch, startPoint }: { branch: string | null; startPoint: string | null },
+    ports: Record<string, number>,
+    generatedSecrets: Record<string, string>,
   ): SandboxRecord {
     const directory = this.workspace.sandboxPathFor(name);
     if (fs.existsSync(directory)) {
-      throw new SbxError(`${directory} already exists.`, 'Remove it, or pick another sandbox name.');
+      throw new SbxError(
+        `${directory} already exists but no sandbox is registered for "${name}".`,
+        `Left over from a create that failed earlier. Remove the directory (\`rm -rf ${directory}\`) and \`git -C ${this.workspace.manifest.rootDirectory} remote remove sbx-${name}\`, then try again.`,
+      );
     }
     fs.mkdirSync(this.workspace.sandboxRoot(), { recursive: true });
     this.terminal.step(`clone ${directory}`);
@@ -123,8 +137,8 @@ export class SandboxCreator {
       slot,
       directory,
       createdAt: new Date().toISOString(),
-      ports: this.workspace.portBlockFor(slot).resolve(),
-      generatedSecrets: this.mintSecrets(),
+      ports,
+      generatedSecrets,
     });
     this.workspace.registry.save(record);
     return record;
