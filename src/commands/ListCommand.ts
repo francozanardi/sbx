@@ -56,7 +56,7 @@ export class ListCommand implements Command {
     const records = workspace.registry.list().sort((left, right) => left.slot - right.slot);
     if (records.length === 0) {
       this.terminal.info('No sandboxes yet for this project. Create one with `sbx create <name>`.');
-      if (this.otherProjectsExist(workspace)) {
+      if (this.otherProjectsHaveSandboxes(workspace)) {
         this.terminal.info('Other projects on this machine have sandboxes — run `sbx list --all` to see them.');
       }
       return;
@@ -75,12 +75,8 @@ export class ListCommand implements Command {
 
   private listAllProjects(): void {
     const rows: [string, string, number, string][] = [];
-    for (const projectName of this.homePath.knownProjectNames()) {
-      const registry = new JsonSandboxRegistry(path.join(this.homePath.stateDirectoryFor(projectName), 'state.json'));
-      let records: SandboxRecord[];
-      try {
-        records = registry.list().sort((left, right) => left.slot - right.slot);
-      } catch {
+    for (const { projectName, records, readable } of this.everyProject()) {
+      if (!readable) {
         rows.push([projectName, '(registry unreadable)', 0, '-']);
         continue;
       }
@@ -95,9 +91,26 @@ export class ListCommand implements Command {
     this.terminal.table(['project', 'name', 'slot', 'directory'], rows);
   }
 
-  private otherProjectsExist(workspace: ProjectWorkspace): boolean {
+  /**
+   * A state directory exists for every project that ever ran `sbx
+   * create`, and it outlives the last sandbox in it. Pointing at
+   * `--all` has to count actual records, or a project that was emptied
+   * months ago keeps advertising sandboxes that are not there.
+   */
+  private otherProjectsHaveSandboxes(workspace: ProjectWorkspace): boolean {
     const own = workspace.manifest.name();
-    return this.homePath.knownProjectNames().some((name) => name !== own);
+    return this.everyProject().some((entry) => entry.projectName !== own && entry.records.length > 0);
+  }
+
+  private everyProject(): { projectName: string; records: SandboxRecord[]; readable: boolean }[] {
+    return this.homePath.knownProjectNames().map((projectName) => {
+      const registry = new JsonSandboxRegistry(path.join(this.homePath.stateDirectoryFor(projectName), 'state.json'));
+      try {
+        return { projectName, records: registry.list().sort((left, right) => left.slot - right.slot), readable: true };
+      } catch {
+        return { projectName, records: [], readable: false };
+      }
+    });
   }
 
   /**
