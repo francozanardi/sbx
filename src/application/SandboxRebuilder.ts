@@ -1,5 +1,6 @@
 import { type Terminal } from '@/cli/Terminal.js';
 import { type HookPhase } from '@/domain/ProjectManifest.js';
+import { SbxError } from '@/domain/SbxError.js';
 import { type SandboxRecord } from '@/domain/SandboxRecord.js';
 import { type EnvMap } from '@/infrastructure/ProcessRunner.js';
 import { type EnvironmentFileWriter } from '@/application/EnvironmentFileWriter.js';
@@ -95,8 +96,35 @@ export class SandboxRebuilder {
 
   private writeEnvironmentFiles(record: SandboxRecord, variables: EnvMap): void {
     this.workspace.secrets.ensureExists();
-    const written = this.environmentFileWriter.write(this.workspace.manifest, record.directory, variables);
+    let written: string[];
+    try {
+      written = this.environmentFileWriter.write(this.workspace.manifest, record.directory, variables);
+    } catch (error) {
+      throw this.explainStaleTemplates(record, error);
+    }
     for (const file of written) this.terminal.step(`rendered ${file}`);
+  }
+
+  /**
+   * A sandbox renders the templates of the commit it has checked out,
+   * which is `origin/HEAD` unless the create asked for something else —
+   * not the working tree the developer is looking at. When a render
+   * fails and the host's copy of that same template differs, that gap is
+   * almost always the reason, and the raw error points the other way: it
+   * reads as "add these variables", when they were just removed on
+   * purpose and the sandbox is rendering the version from before.
+   */
+  private explainStaleTemplates(record: SandboxRecord, error: unknown): unknown {
+    if (!(error instanceof SbxError)) return error;
+    const templates = this.workspace.manifest.environmentFiles().map((file) => file.from);
+    const stale = this.workspace.clones.provenDifferencesFrom('host/HEAD', templates, record.directory);
+    if (stale.length === 0) return error;
+    return new SbxError(
+      error.message,
+      `"${record.name}" has checked out a commit whose ${stale.join(', ')} differs from the copy in your checkout — it is rendering the older version, so this may be a fix you have already made but the sandbox does not have yet. ` +
+        `Compare with \`git -C ${record.directory} diff host/HEAD -- ${stale.join(' ')}\`, then either push and \`sbx rebuild ${record.name}\`, or re-create it with \`--from=HEAD\`.` +
+        (error.hint ? `\n\nIf the sandbox is on the right commit: ${error.hint}` : ''),
+    );
   }
 
   private destroyServices(record: SandboxRecord, variables: EnvMap): void {

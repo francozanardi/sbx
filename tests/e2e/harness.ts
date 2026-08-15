@@ -19,6 +19,10 @@ export interface Fixture {
   projectDir: string;
   /** Fake HOME the CLI reads; every `~/.sbx` and `~/sandboxes` write goes under it. */
   home: string;
+  /** Runs a git command in the project directory. Throws on failure. */
+  git: (...args: string[]) => string;
+  /** Rewrites a file in the project and commits it, without pushing. */
+  commitLocally: (relativePath: string, contents: string, message?: string) => void;
   /** Runs the compiled CLI from the project directory with a clean env. */
   sbx: (...args: string[]) => RunResult;
   /** The same, from any directory — for what sbx does when run from inside a sandbox. */
@@ -35,6 +39,13 @@ interface FixtureOptions {
   templates?: Record<string, string>;
   /** Extra files to seed alongside the manifest, `path → contents`. */
   extras?: Record<string, string>;
+  /**
+   * Give the project a bare `origin` with the fixture commit pushed to it.
+   * Without this the project has no remote, and `sbx create` starts a
+   * sandbox from the local branch — which hides everything about the
+   * origin-tracking default.
+   */
+  withOrigin?: boolean;
 }
 
 let counter = 0;
@@ -61,6 +72,26 @@ export function createFixture(options: FixtureOptions): Fixture {
   }
   initGitRepo(projectDir);
 
+  const git = (...args: string[]): string => {
+    const result = spawnSync('git', args, { cwd: projectDir, encoding: 'utf8' });
+    if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);
+    return result.stdout.trim();
+  };
+
+  if (options.withOrigin) {
+    const remote = path.join(base, 'remote.git');
+    spawnSync('git', ['init', '--quiet', '--bare', '--initial-branch=main', remote], { encoding: 'utf8' });
+    git('remote', 'add', 'origin', remote);
+    git('push', '--quiet', '--set-upstream', 'origin', 'main');
+    git('remote', 'set-head', 'origin', '--auto');
+  }
+
+  const commitLocally = (relativePath: string, contents: string, message = 'local change'): void => {
+    writeFile(path.join(projectDir, relativePath), contents);
+    git('add', '-A');
+    git('commit', '--quiet', '-m', message);
+  };
+
   const sbxIn = (cwd: string, ...args: string[]): RunResult => {
     const result = spawnSync('node', [BIN, ...args], {
       cwd,
@@ -77,7 +108,7 @@ export function createFixture(options: FixtureOptions): Fixture {
     fs.rmSync(base, { recursive: true, force: true });
   };
 
-  return { projectDir, home, sbx, sbxIn, sandboxPath, cleanup };
+  return { projectDir, home, git, commitLocally, sbx, sbxIn, sandboxPath, cleanup };
 }
 
 function writeManifest(projectDir: string, manifest: Record<string, unknown>): void {

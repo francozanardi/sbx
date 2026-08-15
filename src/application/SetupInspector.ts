@@ -65,6 +65,7 @@ export class SetupInspector {
       ['manifest', () => this.checkManifest()],
       ['checkout', () => this.checkNotInsideSandbox()],
       ['git repository', () => this.checkRepository()],
+      ['starting point', () => this.checkStartingPoint()],
       ['ports', () => this.checkPorts()],
       ['port drift', () => this.checkPortDrift()],
       ['secrets', () => this.checkSecrets()],
@@ -151,6 +152,52 @@ export class SetupInspector {
       ok: false,
       detail: `this directory is sandbox "${enclosing.name}", not the host checkout — run sbx from the host so it reports on the repository sandboxes are cloned from`,
     };
+  }
+
+  /**
+   * A sandbox is a clone that checks out `origin/HEAD`, not a copy of
+   * this working tree. Templates, the compose file and hook scripts are
+   * read from the sandbox's own clone, so anything not yet at origin is
+   * simply not there — and the failure surfaces much later, as a render
+   * error naming a variable the developer already fixed.
+   *
+   * The manifest is deliberately excluded: it is read from the host, so
+   * an unpushed change to it does take effect.
+   */
+  private checkStartingPoint(): CheckResult {
+    const name = 'starting point';
+    const ref = this.clones.sandboxStartRef();
+    if (ref !== 'origin/HEAD') {
+      return { name, ok: true, detail: `no origin default branch, so a sandbox starts from \`${ref}\` — this checkout's own commits` };
+    }
+    const ahead = this.clones.commitsAhead('HEAD', ref);
+    const drifted = this.clones.pathsDifferingFrom(ref, this.pathsReadFromTheSandbox());
+    if (drifted.length > 0) {
+      return {
+        name,
+        ok: false,
+        detail:
+          `a sandbox starts from \`origin/HEAD\`, and these files differ there from what is in this checkout: ${drifted.join(', ')}. ` +
+          'A sandbox reads them from its own clone, so it would render the origin version. ' +
+          `Push${ahead ? ` the ${String(ahead)} commit(s) ahead of origin` : ''}, or create with \`--from=HEAD\` to start from this checkout`,
+      };
+    }
+    if (ahead && ahead > 0) {
+      return {
+        name,
+        ok: null,
+        detail: `this checkout is ${String(ahead)} commit(s) ahead of \`origin/HEAD\`, which is where a sandbox starts. No file a sandbox reads from its clone differs, so a create is unaffected`,
+      };
+    }
+    return { name, ok: true, detail: 'a sandbox starts from `origin/HEAD`, which matches this checkout' };
+  }
+
+  /** The project files a sandbox reads from its own clone rather than from the host. */
+  private pathsReadFromTheSandbox(): string[] {
+    const paths = this.workspace.manifest.environmentFiles().map((file) => file.from);
+    const composeFile = this.workspace.manifest.composeFile();
+    if (composeFile) paths.push(composeFile);
+    return paths;
   }
 
   private checkRepository(): CheckResult {

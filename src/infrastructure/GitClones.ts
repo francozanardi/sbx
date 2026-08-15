@@ -216,6 +216,89 @@ export class GitClones {
     }
   }
 
+  /**
+   * The ref a new sandbox of this project would start from, evaluated in
+   * `directory`.
+   *
+   * This mirrors what `create` picks once the clone exists: `origin/HEAD`
+   * when the repository has an origin that names a default branch, and
+   * the current branch otherwise. Reported so a command can say what a
+   * sandbox will get *before* cloning, rather than leaving the developer
+   * to discover it from a rendered file.
+   */
+  sandboxStartRef(directory: string = this.repositoryDirectory): string {
+    if (this.hasRemote(directory, 'origin') && this.hasRef(directory, 'refs/remotes/origin/HEAD')) {
+      return 'origin/HEAD';
+    }
+    return this.currentBranch(directory) ?? 'HEAD';
+  }
+
+  /** How many commits `from` holds that `to` does not, or null when either cannot be resolved. */
+  commitsAhead(from: string, to: string, directory: string = this.repositoryDirectory): number | null {
+    try {
+      const counted = this.processRunner.captureProgram('git', ['rev-list', '--count', `${to}..${from}`], {
+        cwd: directory,
+      });
+      const commits = Number(counted);
+      return Number.isInteger(commits) ? commits : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Of `relativePaths`, the ones whose content at `ref` differs from the
+   * working tree — including paths that exist in one and not the other.
+   *
+   * This is what answers "the sandbox will not render the template you
+   * are looking at". A path git cannot resolve at either end is reported
+   * as differing, because "cannot tell" and "same" must not read alike
+   * when the answer decides whether a create is going to fail.
+   */
+  pathsDifferingFrom(ref: string, relativePaths: readonly string[], directory: string = this.repositoryDirectory): string[] {
+    return relativePaths.filter((relativePath) => this.pathDiffers(ref, relativePath, directory));
+  }
+
+  /**
+   * Of `relativePaths`, the ones that provably differ between `ref` and
+   * the working tree — both sides read successfully and disagree.
+   *
+   * `pathsDifferingFrom` treats "cannot tell" as a difference, which is
+   * right for a check whose job is to refuse to say everything is fine.
+   * This one is the opposite: it backs an explanation added to an error
+   * that already happened, where a wrong claim about why sends the
+   * reader further from the cause than saying nothing would.
+   */
+  provenDifferencesFrom(ref: string, relativePaths: readonly string[], directory: string = this.repositoryDirectory): string[] {
+    return relativePaths.filter((relativePath) => {
+      const atRef = this.blobHash(`${ref}:${relativePath}`, directory);
+      const inTree = this.workingTreeHash(relativePath, directory);
+      return atRef !== null && inTree !== null && atRef !== inTree;
+    });
+  }
+
+  private pathDiffers(ref: string, relativePath: string, directory: string): boolean {
+    const atRef = this.blobHash(`${ref}:${relativePath}`, directory);
+    const inTree = this.workingTreeHash(relativePath, directory);
+    return atRef !== inTree;
+  }
+
+  private blobHash(revisionPath: string, directory: string): string | null {
+    try {
+      return this.processRunner.captureProgram('git', ['rev-parse', revisionPath], { cwd: directory });
+    } catch {
+      return null;
+    }
+  }
+
+  private workingTreeHash(relativePath: string, directory: string): string | null {
+    try {
+      return this.processRunner.captureProgram('git', ['hash-object', '--', relativePath], { cwd: directory });
+    } catch {
+      return null;
+    }
+  }
+
   /** True when the repository's ignore rules cover this path, tracked or not. */
   ignores(relativePath: string): boolean {
     try {
