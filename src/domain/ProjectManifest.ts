@@ -31,71 +31,170 @@ export type GenerateSpec = Record<string, number>;
 /**
  * Validated view over a project's `sandbox.config.json`. Every accessor
  * returns a value the rest of the tool can use without re-checking it;
- * anything missing or malformed fails here, naming the offending field.
+ * anything missing or malformed fails when the offending field is asked
+ * for, naming that field.
  *
- * The whole file is checked in the constructor rather than lazily, so a
- * typo in a field only `sbx delete` reads is reported by `sbx doctor` too,
- * and no command can get halfway through its work before finding out.
+ * Validation is lazy per field so a mistake in one section only breaks
+ * commands that read that section: `sbx list` reports what the registry
+ * knows even when a hook or a port variable is malformed. Commands that
+ * need to walk the whole manifest ask `checkAll()` — that is what `sbx
+ * doctor` uses to list every problem in one pass.
  *
  * Relative paths in the manifest are resolved against the directory the
  * manifest was found in, which is treated as the project root.
  */
 export class ProjectManifest {
   readonly rootDirectory: string;
-  private readonly _name: string;
-  private readonly _basePorts: BasePorts;
-  private readonly _portVariableNames: PortEnvNames;
-  private readonly _portStride: number;
-  private readonly _maxSlots: number;
-  private readonly _hooks: readonly Hook[];
-  private readonly _environmentFiles: readonly EnvFileEntry[];
-  private readonly _generatedSecrets: GenerateSpec;
-  private readonly _staticVariables: StaticVariables;
-  private readonly _sandboxRoot: string | null;
-  private readonly _composeFile: string | null;
-  private readonly _secretsFile: string | null;
+  private readonly root: ManifestField;
+
+  private cachedName?: string;
+  private cachedBasePorts?: BasePorts;
+  private cachedPortStride?: number;
+  private cachedMaxSlots?: number;
+  private cachedPortVariableNames?: PortEnvNames;
+  private cachedHooks?: readonly Hook[];
+  private cachedEnvironmentFiles?: readonly EnvFileEntry[];
+  private cachedGeneratedSecrets?: GenerateSpec;
+  private cachedStaticVariables?: StaticVariables;
+  private sandboxRootResolved = false;
+  private cachedSandboxRoot: string | null = null;
+  private composeFileResolved = false;
+  private cachedComposeFile: string | null = null;
+  private secretsFileResolved = false;
+  private cachedSecretsFile: string | null = null;
+
+  private portDomainChecked = false;
+  private variableCollisionsChecked = false;
 
   constructor(raw: unknown, rootDirectory: string) {
     this.rootDirectory = rootDirectory;
-    const root = this.requireObject(raw);
+    this.root = this.requireObject(raw);
+  }
 
-    this._name = root.at('name').string('It names the state directory and the Compose project of every sandbox.');
+  name(): string {
+    this.cachedName ??= this.root
+      .at('name')
+      .string('It names the state directory and the Compose project of every sandbox.');
+    return this.cachedName;
+  }
 
-    const ports = root.at('ports');
-    this._basePorts = this.requireBasePorts(ports);
-    this._portStride = ports
-      .at('stride')
-      .optionalInteger(
-        'It is how far apart two consecutive slots sit. Leave it out to use the default of 10.',
-        { min: 1, max: MAX_PORT },
-        DEFAULT_STRIDE,
+  basePorts(): BasePorts {
+    const value = this.resolveBasePorts();
+    this.ensurePortDomainValid();
+    return value;
+  }
+
+  portStride(): number {
+    const value = this.resolvePortStride();
+    this.ensurePortDomainValid();
+    return value;
+  }
+
+  maxSlots(): number {
+    const value = this.resolveMaxSlots();
+    this.ensurePortDomainValid();
+    return value;
+  }
+
+  /** Environment variable each port role is published under. */
+  portVariableNames(): PortEnvNames {
+    const value = this.resolvePortVariableNames();
+    this.ensureVariableCollisionsChecked();
+    return value;
+  }
+
+  defaultVariableNameFor(role: string): string {
+    return `${role.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase()}_PORT`;
+  }
+
+  /** Where sandbox clones are created, or null to fall back to the tool's own default. */
+  sandboxRoot(): string | null {
+    if (!this.sandboxRootResolved) {
+      this.cachedSandboxRoot = this.root
+        .at('sandboxRoot')
+        .optionalString('It is where sandbox clones are created. `~` is expanded; leave it out to use `~/sandboxes/<project>`.');
+      this.sandboxRootResolved = true;
+    }
+    return this.cachedSandboxRoot;
+  }
+
+  /** Compose file describing the stateful services, or null when the project needs none. */
+  composeFile(): string | null {
+    if (!this.composeFileResolved) {
+      this.cachedComposeFile = this.optionalRelativePath(
+        this.root.at('compose'),
+        "It is the path to the Compose file, relative to the repository root, and is read from each sandbox's own clone.",
       );
-    this._maxSlots = ports
-      .at('maxSlots')
-      .optionalInteger(
-        'It caps how many sandboxes this project can have at once. Leave it out to use the default of 9.',
-        { min: 1, max: MAX_PORT },
-        DEFAULT_MAX_SLOTS,
-      );
-    this._portVariableNames = this.requirePortVariableNames(ports);
-    this.rejectCollidingPorts();
+      this.composeFileResolved = true;
+    }
+    return this.cachedComposeFile;
+  }
 
-    this._hooks = this.requireHooks(root.at('hooks'));
-    this._environmentFiles = this.requireEnvironmentFiles(root.at('env'));
-    this._generatedSecrets = this.requireGeneratedSecrets(root.at('generate'));
-    this._staticVariables = this.requireStaticVariables(root.at('variables'));
-    this.rejectVariableCollisions();
+  /** Files to render into each sandbox, as `{ from, to }` pairs of project-relative paths. */
+  environmentFiles(): readonly EnvFileEntry[] {
+    this.cachedEnvironmentFiles ??= this.requireEnvironmentFiles(this.root.at('env'));
+    return this.cachedEnvironmentFiles;
+  }
 
-    this._composeFile = this.optionalRelativePath(
-      root.at('compose'),
-      "It is the path to the Compose file, relative to the repository root, and is read from each sandbox's own clone.",
-    );
-    this._sandboxRoot = root
-      .at('sandboxRoot')
-      .optionalString('It is where sandbox clones are created. `~` is expanded; leave it out to use `~/sandboxes/<project>`.');
-    this._secretsFile = root
-      .at('secrets')
-      .optionalString('It is the path to the shared credentials file. `~` is expanded; leave it out to use `~/.sbx/<project>/secrets.env`.');
+  /** Variable name to byte length, for secrets minted once per sandbox. */
+  generatedSecrets(): GenerateSpec {
+    const value = this.resolveGeneratedSecrets();
+    this.ensureVariableCollisionsChecked();
+    return value;
+  }
+
+  /**
+   * Fixed values every sandbox of this project gets, for settings that
+   * belong to the repository rather than to the machine — a shared build
+   * cache directory, a log level, a feature flag.
+   */
+  staticVariables(): StaticVariables {
+    const value = this.resolveStaticVariables();
+    this.ensureVariableCollisionsChecked();
+    return value;
+  }
+
+  /** Path to the shared secrets file, or null to fall back to the tool's own default. */
+  secretsFile(): string | null {
+    if (!this.secretsFileResolved) {
+      this.cachedSecretsFile = this.root
+        .at('secrets')
+        .optionalString('It is the path to the shared credentials file. `~` is expanded; leave it out to use `~/.sbx/<project>/secrets.env`.');
+      this.secretsFileResolved = true;
+    }
+    return this.cachedSecretsFile;
+  }
+
+  /** Every declared hook, in order, as `{ name, phase, run }`. */
+  hooks(): readonly Hook[] {
+    this.cachedHooks ??= this.requireHooks(this.root.at('hooks'));
+    return this.cachedHooks;
+  }
+
+  /** Hooks in the given phase, in declaration order. */
+  hooksForPhase(phase: HookPhase): readonly Hook[] {
+    return this.hooks().filter((hook) => hook.phase === phase);
+  }
+
+  /**
+   * Walks every field to surface every validation error the manifest
+   * carries. `sbx doctor` and any command that wants "validate the whole
+   * file before doing work" call this; day-to-day commands rely on lazy
+   * per-field validation instead.
+   */
+  checkAll(): void {
+    this.name();
+    this.basePorts();
+    this.portStride();
+    this.maxSlots();
+    this.portVariableNames();
+    this.hooks();
+    this.environmentFiles();
+    this.generatedSecrets();
+    this.staticVariables();
+    this.composeFile();
+    this.sandboxRoot();
+    this.secretsFile();
   }
 
   private requireObject(raw: unknown): ManifestField {
@@ -106,6 +205,66 @@ export class ProjectManifest {
       );
     }
     return new ManifestField('', raw);
+  }
+
+  private resolveBasePorts(): BasePorts {
+    this.cachedBasePorts ??= this.requireBasePorts(this.root.at('ports'));
+    return this.cachedBasePorts;
+  }
+
+  private resolvePortStride(): number {
+    this.cachedPortStride ??= this.root
+      .at('ports')
+      .at('stride')
+      .optionalInteger(
+        'It is how far apart two consecutive slots sit. Leave it out to use the default of 10.',
+        { min: 1, max: MAX_PORT },
+        DEFAULT_STRIDE,
+      );
+    return this.cachedPortStride;
+  }
+
+  private resolveMaxSlots(): number {
+    this.cachedMaxSlots ??= this.root
+      .at('ports')
+      .at('maxSlots')
+      .optionalInteger(
+        'It caps how many sandboxes this project can have at once. Leave it out to use the default of 9.',
+        { min: 1, max: MAX_PORT },
+        DEFAULT_MAX_SLOTS,
+      );
+    return this.cachedMaxSlots;
+  }
+
+  private resolvePortVariableNames(): PortEnvNames {
+    this.cachedPortVariableNames ??= this.requirePortVariableNames(this.root.at('ports'), this.resolveBasePorts());
+    return this.cachedPortVariableNames;
+  }
+
+  private resolveGeneratedSecrets(): GenerateSpec {
+    this.cachedGeneratedSecrets ??= this.requireGeneratedSecrets(this.root.at('generate'));
+    return this.cachedGeneratedSecrets;
+  }
+
+  private resolveStaticVariables(): StaticVariables {
+    this.cachedStaticVariables ??= this.requireStaticVariables(this.root.at('variables'));
+    return this.cachedStaticVariables;
+  }
+
+  private ensurePortDomainValid(): void {
+    if (this.portDomainChecked) return;
+    this.rejectCollidingPorts(this.resolveBasePorts(), this.resolvePortStride(), this.resolveMaxSlots());
+    this.portDomainChecked = true;
+  }
+
+  private ensureVariableCollisionsChecked(): void {
+    if (this.variableCollisionsChecked) return;
+    this.rejectVariableCollisions(
+      this.resolvePortVariableNames(),
+      this.resolveGeneratedSecrets(),
+      this.resolveStaticVariables(),
+    );
+    this.variableCollisionsChecked = true;
   }
 
   private requireBasePorts(ports: ManifestField): BasePorts {
@@ -132,18 +291,18 @@ export class ProjectManifest {
    * plus `_PORT`, so a manifest only spells out the names that do not
    * follow that shape.
    */
-  private requirePortVariableNames(ports: ManifestField): PortEnvNames {
+  private requirePortVariableNames(ports: ManifestField, basePorts: BasePorts): PortEnvNames {
     const configured = ports.at('env');
     for (const [role] of configured.optionalEntries('Each key is a role from `ports.base` and each value is the variable it is published under.')) {
-      if (!(role in this._basePorts)) {
+      if (!(role in basePorts)) {
         throw configured.at(role).reject(
-          `names a role \`ports.base\` does not declare (it has: ${Object.keys(this._basePorts).join(', ')})`,
+          `names a role \`ports.base\` does not declare (it has: ${Object.keys(basePorts).join(', ')})`,
           'Only roles with a base port can be published. Add the role to `ports.base`, or drop this entry.',
         );
       }
     }
     const names: PortEnvNames = {};
-    for (const role of Object.keys(this._basePorts)) {
+    for (const role of Object.keys(basePorts)) {
       const declared = configured.at(role);
       const name = declared.present()
         ? declared.string('It is the environment variable this role is published under, as in `"api": "HTTP_PORT"`.')
@@ -167,14 +326,19 @@ export class ProjectManifest {
    * version of the bug — a sandbox stealing a port the developer's own
    * checkout is bound to — is included.
    */
-  private rejectCollidingPorts(): void {
-    const roles = Object.entries(this._basePorts);
+  private rejectCollidingPorts(basePorts: BasePorts, stride: number, maxSlots: number): void {
+    const roles = Object.entries(basePorts);
     for (const [index, left] of roles.entries()) {
-      for (const right of roles.slice(index + 1)) this.rejectCollidingPair(left, right);
+      for (const right of roles.slice(index + 1)) this.rejectCollidingPair(left, right, stride, maxSlots);
     }
   }
 
-  private rejectCollidingPair([leftRole, leftPort]: [string, number], [rightRole, rightPort]: [string, number]): void {
+  private rejectCollidingPair(
+    [leftRole, leftPort]: [string, number],
+    [rightRole, rightPort]: [string, number],
+    stride: number,
+    maxSlots: number,
+  ): void {
     if (leftPort === rightPort) {
       throw new SbxError(
         `${MANIFEST_FILENAME}: \`ports.base.${leftRole}\` and \`ports.base.${rightRole}\` are both ${leftPort}.`,
@@ -182,12 +346,12 @@ export class ProjectManifest {
       );
     }
     const distance = Math.abs(leftPort - rightPort);
-    if (distance % this._portStride !== 0) return;
-    const slots = distance / this._portStride;
-    if (slots > this._maxSlots) return;
+    if (distance % stride !== 0) return;
+    const slots = distance / stride;
+    if (slots > maxSlots) return;
     const [lowRole, highRole] = leftPort < rightPort ? [leftRole, rightRole] : [rightRole, leftRole];
     throw new SbxError(
-      `${MANIFEST_FILENAME}: \`ports.base.${leftRole}\` (${leftPort}) and \`ports.base.${rightRole}\` (${rightPort}) are ${distance} apart, an exact multiple of \`ports.stride\` (${this._portStride}).`,
+      `${MANIFEST_FILENAME}: \`ports.base.${leftRole}\` (${leftPort}) and \`ports.base.${rightRole}\` (${rightPort}) are ${distance} apart, an exact multiple of \`ports.stride\` (${stride}).`,
       `Every port shifts by slot × stride, so slot ${slots} would bind ${Math.max(leftPort, rightPort)} for \`${lowRole}\` — the port slot 0, this checkout, already uses for \`${highRole}\`. Move one base port, or pick a stride that does not divide ${distance}.`,
     );
   }
@@ -288,7 +452,11 @@ export class ProjectManifest {
    * always a typo: the map is built in a fixed order, so one of the two
    * simply never reaches a template.
    */
-  private rejectVariableCollisions(): void {
+  private rejectVariableCollisions(
+    portVariableNames: PortEnvNames,
+    generatedSecrets: GenerateSpec,
+    staticVariables: StaticVariables,
+  ): void {
     const sources = new Map<string, string>();
     const claim = (name: string, source: string): void => {
       const owner = sources.get(name);
@@ -300,9 +468,9 @@ export class ProjectManifest {
       }
       sources.set(name, source);
     };
-    for (const [role, name] of Object.entries(this._portVariableNames)) claim(name, `the \`${role}\` port`);
-    for (const name of Object.keys(this._generatedSecrets)) claim(name, '`generate`');
-    for (const name of Object.keys(this._staticVariables)) claim(name, '`variables`');
+    for (const [role, name] of Object.entries(portVariableNames)) claim(name, `the \`${role}\` port`);
+    for (const name of Object.keys(generatedSecrets)) claim(name, '`generate`');
+    for (const name of Object.keys(staticVariables)) claim(name, '`variables`');
   }
 
   /**
@@ -329,74 +497,5 @@ export class ProjectManifest {
       );
     }
     return value;
-  }
-
-  name(): string {
-    return this._name;
-  }
-
-  basePorts(): BasePorts {
-    return this._basePorts;
-  }
-
-  /** Environment variable each port role is published under. */
-  portVariableNames(): PortEnvNames {
-    return this._portVariableNames;
-  }
-
-  defaultVariableNameFor(role: string): string {
-    return `${role.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase()}_PORT`;
-  }
-
-  portStride(): number {
-    return this._portStride;
-  }
-
-  maxSlots(): number {
-    return this._maxSlots;
-  }
-
-  /** Where sandbox clones are created, or null to fall back to the tool's own default. */
-  sandboxRoot(): string | null {
-    return this._sandboxRoot;
-  }
-
-  /** Compose file describing the stateful services, or null when the project needs none. */
-  composeFile(): string | null {
-    return this._composeFile;
-  }
-
-  /** Files to render into each sandbox, as `{ from, to }` pairs of project-relative paths. */
-  environmentFiles(): readonly EnvFileEntry[] {
-    return this._environmentFiles;
-  }
-
-  /** Variable name to byte length, for secrets minted once per sandbox. */
-  generatedSecrets(): GenerateSpec {
-    return this._generatedSecrets;
-  }
-
-  /**
-   * Fixed values every sandbox of this project gets, for settings that
-   * belong to the repository rather than to the machine — a shared build
-   * cache directory, a log level, a feature flag.
-   */
-  staticVariables(): StaticVariables {
-    return this._staticVariables;
-  }
-
-  /** Path to the shared secrets file, or null to fall back to the tool's own default. */
-  secretsFile(): string | null {
-    return this._secretsFile;
-  }
-
-  /** Every declared hook, in order, as `{ name, phase, run }`. */
-  hooks(): readonly Hook[] {
-    return this._hooks;
-  }
-
-  /** Hooks in the given phase, in declaration order. */
-  hooksForPhase(phase: HookPhase): readonly Hook[] {
-    return this._hooks.filter((hook) => hook.phase === phase);
   }
 }

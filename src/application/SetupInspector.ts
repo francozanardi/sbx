@@ -62,6 +62,7 @@ export class SetupInspector {
   async inspect(): Promise<CheckResult[]> {
     const variables = this.previewVariables();
     const checks: [string, () => Promise<Produced> | Produced][] = [
+      ['manifest', () => this.checkManifest()],
       ['checkout', () => this.checkNotInsideSandbox()],
       ['git repository', () => this.checkRepository()],
       ['ports', () => this.checkPorts()],
@@ -124,6 +125,17 @@ export class SetupInspector {
   private nextSlot(): number {
     const allocator = new SlotAllocator(this.workspace.manifest.maxSlots());
     return allocator.allocate(this.workspace.registry.list().map((record) => record.slot));
+  }
+
+  /**
+   * The manifest validates lazily by field so day-to-day commands ignore
+   * sections they do not read. Doctor is the one command that has to walk
+   * every field — this is where a broken hook or an unused-but-invalid
+   * variable name comes to the surface.
+   */
+  private checkManifest(): CheckResult {
+    this.workspace.manifest.checkAll();
+    return { name: 'manifest', ok: true, detail: 'sandbox.config.json parses and every field is valid' };
   }
 
   /**

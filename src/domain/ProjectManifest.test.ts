@@ -8,7 +8,9 @@ const validRaw = {
 };
 
 function build(raw: unknown): ProjectManifest {
-  return new ProjectManifest(raw, '/tmp/demo');
+  const manifest = new ProjectManifest(raw, '/tmp/demo');
+  manifest.checkAll();
+  return manifest;
 }
 
 describe('ProjectManifest — basics', () => {
@@ -299,5 +301,39 @@ describe('ProjectManifest — optional fields', () => {
     expect(manifest.environmentFiles()).toEqual([{ from: 't.env', to: '.env' }]);
     expect(manifest.generatedSecrets()).toEqual({ SESSION: 32 });
     expect(manifest.staticVariables()).toEqual({ LOG: 'debug' });
+  });
+});
+
+describe('ProjectManifest — lazy validation', () => {
+  it('does not validate untouched sections at construction', () => {
+    const raw = {
+      name: 'demo',
+      ports: { base: { api: 3000 }, env: { api: 'SBX_API_PORT' } },
+      hooks: [{ name: 'bad', phase: 'not-a-phase', run: 'x' }],
+    };
+    const manifest = new ProjectManifest(raw, '/tmp/demo');
+    expect(manifest.name()).toBe('demo');
+    expect(manifest.composeFile()).toBeNull();
+    expect(manifest.sandboxRoot()).toBeNull();
+    expect(manifest.secretsFile()).toBeNull();
+    expect(manifest.environmentFiles()).toEqual([]);
+  });
+
+  it('reports a section error only when that section is asked for', () => {
+    const raw = {
+      name: 'demo',
+      ports: { base: { api: 3000 }, env: { api: 'SBX_API_PORT' } },
+    };
+    const manifest = new ProjectManifest(raw, '/tmp/demo');
+    expect(() => manifest.portVariableNames()).toThrow(/reserved/);
+  });
+
+  it('checkAll surfaces every field error', () => {
+    const raw = {
+      name: 'demo',
+      ports: { base: { api: 3000 }, env: { api: 'SBX_API_PORT' } },
+    };
+    const manifest = new ProjectManifest(raw, '/tmp/demo');
+    expect(() => { manifest.checkAll(); }).toThrow(/reserved/);
   });
 });
